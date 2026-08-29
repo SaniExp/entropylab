@@ -1,0 +1,958 @@
+<script>
+(async () => {
+  const results = [];
+  const state = window.__entropyLabTest;
+  const crypto = window.__entropyLabCrypto;
+  const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+  const until = async (predicate, description, timeout = 15000) => {
+    const deadline = Date.now() + timeout;
+    while (Date.now() < deadline) {
+      const value = predicate();
+      if (value) return value;
+      await wait(50);
+    }
+    throw new Error("Timed out waiting for " + description);
+  };
+  const test = async (name, body) => {
+    try {
+      await body();
+      results.push({ name, ok: true });
+    } catch (error) {
+      results.push({
+        name,
+        ok: false,
+        error: (error instanceof Error ? error.message : String(error)).replace(/[\t\r\n]+/g, " "),
+      });
+    }
+  };
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const equal = (actual, expected) => {
+    if (actual !== expected) throw new Error(`expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  };
+  const report = (filename) => {
+    const text = results.map((result) =>
+      [result.ok ? "ok" : "not ok", result.name, result.error || ""].join("\t")
+    ).join("\n") + "\n";
+    window.__downloadTestReport(filename, text);
+  };
+  const currentVersion = document.querySelector('meta[name="application-version"]')?.content;
+  const currentFile = "entropylab.html";
+  const versionHeader = `ENTROPYLAB ${currentVersion?.toUpperCase()}`;
+
+  await wait(500);
+
+  if (new URLSearchParams(location.search).get("offline-test") === "1") {
+    await test("offline mode keeps online-only presentation disabled", () => {
+      const warning = document.getElementById("online-warning");
+      const logo = document.querySelector(".site-logo");
+      // The warning is live but hidden by default; this asserts the offline
+      // build never reveals it.
+      assert(!warning || warning.hidden, "Offline mode displayed the online warning");
+      assert(logo, "Header logo is missing");
+      assert(
+        getComputedStyle(logo).backgroundImage.startsWith('url("data:image/png;base64,'),
+        "Offline mode did not render the header logo from an inline data URI",
+      );
+    });
+    await test("offline mode performs no HTTP, WebSocket, or XHR connections", () => {
+      assert(state.network.length === 0, "Offline code attempted a connection");
+      const external = performance.getEntriesByType("resource")
+        .map((entry) => entry.name)
+        .filter((url) => /^(https?|wss?):/i.test(url));
+      assert(external.length === 0, "Offline mode loaded a network resource: " + external.join(", "));
+      const label = document.querySelector(".site-version");
+      assert(label, "Header version label is missing");
+      equal(label.textContent.replace(/\s+/g, " ").trim(), currentVersion + " (Latest)");
+      assert(!label.querySelector("a"), "Offline version label offered a link");
+    });
+    await test("offline host passes the startup sanity-check barrage", () => {
+      const root = document.documentElement;
+      equal(root.dataset.browserFailed, "0");
+      assert(Number(root.dataset.browserChecks) >= 5, "Sanity barrage did not record its checks");
+      assert(document.getElementById("btc-calc"), "Page was killed despite all checks passing");
+      assert(!document.querySelector(".sanity-failure"), "Failure screen rendered on a sane host");
+    });
+    report("offline-results.txt");
+    return;
+  }
+
+  const vectors = [
+    {
+      entropy: "00000000000000000000000000000000",
+      mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      seed: "c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04",
+      xprv: "xprv9s21ZrQH143K3h3fDYiay8mocZ3afhfULfb5GX8kCBdno77K4HiA15Tg23wpbeF1pLfs1c5SPmYHrEpTuuRhxMwvKDwqdKiGJS9XFKzUsAF",
+    },
+    {
+      entropy: "000000000000000000000000000000000000000000000000",
+      mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+      seed: "035895f2f481b1b0f01fcf8c289c794660b289981a78f8106447707fdd9666ca06da5a9a565181599b79f53b844d8a71dd9f439c52a3d7b3e8a79c906ac845fa",
+      xprv: "xprv9s21ZrQH143K3mEDrypcZ2usWqFgzKB6jBBx9B6GfC7fu26X6hPRzVjzkqkPvDqp6g5eypdk6cyhGnBngbjeHTe4LsuLG1cCmKJka5SMkmU",
+    },
+    {
+      entropy: "0000000000000000000000000000000000000000000000000000000000000000",
+      mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+      seed: "bda85446c68413707090a52022edd26a1c9462295029f2e60cd7c4f2bbd3097170af7a4d73245cafa9c3cca8d561a7c3de6f5d4a10be8ed2a5e608d68f92fcc8",
+      xprv: "xprv9s21ZrQH143K32qBagUJAMU2LsHg3ka7jqMcV98Y7gVeVyNStwYS3U7yVVoDZ4btbRNf4h6ibWpY22iRmXq35qgLs79f312g2kj5539ebPM",
+    },
+  ];
+
+  for (const [index, vector] of vectors.entries()) {
+    const bits = vector.entropy.length * 4;
+    await test(`BIP39 vector ${index + 1}: ${bits}-bit entropy produces the expected mnemonic`, () => {
+      equal(crypto.entropyToMnemonic(vector.entropy), vector.mnemonic);
+    });
+    await test(`BIP39 vector ${index + 1}: mnemonic recovers the original entropy`, () => {
+      equal(crypto.mnemonicToEntropy(vector.mnemonic), vector.entropy);
+    });
+    await test(`BIP39 vector ${index + 1}: mnemonic and passphrase produce the expected seed`, () => {
+      equal(crypto.mnemonicToSeed(vector.mnemonic, "TREZOR"), vector.seed);
+    });
+    await test(`BIP32 vector ${index + 1}: seed produces the expected master xprv`, () => {
+      equal(crypto.masterXprv(vector.mnemonic, "TREZOR"), vector.xprv);
+    });
+  }
+
+  await test("BIP39 accepts a checksum-valid mnemonic", () => equal(crypto.validateMnemonic(vectors[0].mnemonic), true));
+  await test("BIP39 rejects a mnemonic with an invalid checksum", () => equal(crypto.validateMnemonic("abandon ".repeat(11) + "abandon"), false));
+  await test("BIP39 rejects a word outside the English list", () => equal(crypto.validateMnemonic("abandon ".repeat(11) + "entropy-lab"), false));
+  await test("BIP39 applies NFKD normalization to passphrases", () => {
+    equal(crypto.mnemonicToSeed(vectors[0].mnemonic, "caf\u00e9"), crypto.mnemonicToSeed(vectors[0].mnemonic, "cafe\u0301"));
+  });
+
+  const chooseMode = async (label) => {
+    const button = [...document.querySelectorAll("#modes button")].find((item) => item.textContent.includes(label));
+    assert(button, "Missing mode button: " + label);
+    button.click();
+    await wait(0);
+  };
+  const input = (element, value) => {
+    element.value = value;
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  await test("hosted preview enables its warning and inline branding", () => {
+    const warning = document.getElementById("online-warning");
+    const logo = document.querySelector(".site-logo");
+    const favicon = document.querySelector('link[rel="icon"]');
+    // Parked with the rest of the banners; restore them and this asserts the
+    // hosted build lights the warning up again.
+    assert(!warning || !warning.hidden, "Online warning was not displayed");
+    assert(logo, "Header logo is missing");
+    assert(
+      getComputedStyle(logo).backgroundImage.startsWith('url("data:image/png;base64,'),
+      "Hosted mode did not render the header logo from an inline data URI",
+    );
+    assert(favicon && favicon.href.startsWith("data:image/png;base64,"), "Favicon is not inlined");
+  });
+
+  await test("hosted host passes the startup sanity-check barrage", () => {
+    const root = document.documentElement;
+    equal(root.dataset.browserFailed, "0");
+    assert(Number(root.dataset.browserChecks) >= 5, "Sanity barrage did not record its checks");
+    assert(document.getElementById("btc-calc"), "Page was killed despite all checks passing");
+    assert(!document.querySelector(".sanity-failure"), "Failure screen rendered on a sane host");
+  });
+
+  await test("hosted build stays network-silent and keeps its static version label", async () => {
+    await wait(0);
+    // The app makes no requests beyond the document and its test-suite fetch:
+    // the CSP is connect-src 'none' and nothing fetches a version manifest.
+    const resources = performance.getEntriesByType("resource").map((entry) => entry.name);
+    const observed = [...state.network.map((entry) => entry.url), ...resources];
+    const external = observed.filter((url) => {
+      try { return new URL(url, location.href).origin !== location.origin; }
+      catch { return true; }
+    });
+    assert(external.length === 0, "External network activity: " + external.join(", "));
+    const manifestRequests = observed.filter((url) => /versions\.json$/.test(new URL(url, location.href).pathname));
+    assert(manifestRequests.length === 0, "A version manifest was fetched: " + manifestRequests.join(", "));
+    const label = document.querySelector(".site-version");
+    equal(label.textContent.replace(/\s+/g, " ").trim(), currentVersion + " (Latest)");
+    assert(!label.querySelector("a"), "The static version label links nowhere");
+    // The logo and the favicon travel inside the document, so neither is fetched.
+    const imageRequests = observed.filter((url) => /\/assets\/(entropylab_(dark|light)|logo-(dark|light)|favicon)\.png$/.test(new URL(url, location.href).pathname));
+    assert(imageRequests.length === 0, "Hosted mode fetched an inlined image: " + imageRequests.join(", "));
+  });
+
+  await test("limited private-key prefixes replace the full keypad until selected", async () => {
+    await chooseMode("Private key");
+    const privateKey = await until(() => document.getElementById("key"), "private-key input");
+    const keyboard = document.querySelector("#passphrase-keyboard-host [data-on-screen-keyboard]");
+    const toggle = document.getElementById("private-keyboard-toggle");
+    const initialRow = keyboard?.querySelector("[data-private-key-initial-row]");
+    assert(keyboard && toggle && initialRow, "Private-key initial choices are missing");
+    if (keyboard.hidden) toggle.click();
+    input(privateKey, "");
+    document.querySelector('input[name="kk"][value="wif"]').click();
+    let options = [...initialRow.querySelectorAll("[data-private-key-initial]:not([hidden])")];
+    equal(options.map((button) => button.dataset.seedKey).join(""), "5KL");
+    assert([...keyboard.querySelectorAll("[data-seed-keyboard-row],.seed-keyboard-space-row")].every((row) => row.hidden), "The full mainnet WIF keypad remained visible");
+    const network = document.getElementById("network");
+    network.value = "testnet";
+    network.dispatchEvent(new Event("change", { bubbles: true }));
+    options = [...initialRow.querySelectorAll("[data-private-key-initial]:not([hidden])")];
+    equal(options.map((button) => button.dataset.seedKey).join(""), "9c");
+    network.value = "mainnet";
+    network.dispatchEvent(new Event("change", { bubbles: true }));
+    options = [...initialRow.querySelectorAll("[data-private-key-initial]:not([hidden])")];
+    options.find((button) => button.dataset.seedKey === "K").click();
+    equal(privateKey.value, "K");
+    assert(initialRow.hidden && [...keyboard.querySelectorAll("[data-seed-keyboard-row]")].some((row) => !row.hidden), "The WIF keypad did not return after selecting K");
+    document.querySelector('input[name="kk"][value="minikey"]').closest("label").click();
+    equal(privateKey.value, "", "WIF input leaked into the empty Mini-key input");
+    options = [...initialRow.querySelectorAll("[data-private-key-initial]:not([hidden])")];
+    equal(options.map((button) => button.dataset.seedKey).join(""), "S");
+    options[0].click();
+    equal(privateKey.value, "S");
+    assert(initialRow.hidden, "The Mini-key keypad did not return after selecting S");
+    document.querySelector('input[name="kk"][value="wif"]').click();
+    equal(privateKey.value, "K", "WIF input was not restored after switching methods");
+    document.querySelector('input[name="kk"][value="minikey"]').click();
+    equal(privateKey.value, "S", "Mini-key input was not restored after switching methods");
+    input(privateKey, "");
+    document.querySelector('input[name="kk"][value="hex-key"]').click();
+    const hexKeypad = keyboard.querySelector("[data-private-key-hex-keypad]");
+    assert(hexKeypad && !hexKeypad.hidden, "The dedicated hexadecimal keypad was not shown");
+    equal([...hexKeypad.querySelectorAll(".private-key-hex-row:first-child [data-seed-key]")].map((button) => button.dataset.seedKey).join(""), "0123456789");
+    equal([...hexKeypad.querySelectorAll(".private-key-hex-row:last-child [data-seed-key]")].map((button) => button.dataset.seedKey).join(""), "abcdef");
+    assert([...keyboard.querySelectorAll("[data-seed-keyboard-row],.seed-keyboard-space-row")].every((row) => row.hidden), "The mode-switched keypad remained visible for Hex");
+    hexKeypad.querySelector('[data-seed-key="a"]').click();
+    hexKeypad.querySelector('[data-seed-key="1"]').click();
+    equal(privateKey.value, "a1");
+    hexKeypad.querySelector("[data-private-key-hex-delete]").click();
+    equal(privateKey.value, "a");
+    document.querySelector('input[name="kk"][value="wif"]').click();
+    equal(privateKey.value, "K", "WIF input was not preserved separately from Hex");
+    document.querySelector('input[name="kk"][value="hex-key"]').click();
+    equal(privateKey.value, "a", "Hex input was not restored after switching methods");
+    document.querySelector('input[name="kk"][value="brain"]').click();
+    equal(privateKey.value, "", "Hex input leaked into the empty brain-wallet input");
+    input(privateKey, "isolated recovery phrase");
+    document.querySelector('input[name="kk"][value="wif"]').click();
+    equal(privateKey.value, "K", "WIF input was not preserved separately from the brain-wallet input");
+    document.querySelector('input[name="kk"][value="brain"]').click();
+    equal(privateKey.value, "isolated recovery phrase", "Brain-wallet input was not restored after switching methods");
+    input(privateKey, "");
+    document.querySelector('input[name="kk"][value="wif"]').click();
+    input(privateKey, "");
+    input(privateKey, "5");
+    const miniInputOnly = document.querySelector('input[name="kk"][value="minikey"]');
+    miniInputOnly.checked = true;
+    miniInputOnly.dispatchEvent(new Event("input", { bubbles: true }));
+    equal(privateKey.value, "", "WIF input leaked when a selector emitted input without change");
+    input(privateKey, "");
+    const wifInputOnly = document.querySelector('input[name="kk"][value="wif"]');
+    wifInputOnly.checked = true;
+    wifInputOnly.dispatchEvent(new Event("input", { bubbles: true }));
+    input(privateKey, "");
+    document.querySelector('input[name="kk"][value="hex-key"]').click();
+    input(privateKey, "");
+    document.querySelector('input[name="kk"][value="minikey"]').click();
+    input(privateKey, "");
+    document.querySelector('input[name="kk"][value="wif"]').click();
+    if (!keyboard.hidden) toggle.click();
+  });
+
+  await test("hex, seed, and private-key inputs cannot inject markup", async () => {
+    const payload = '<img src=x onerror="window.__browserTestInjected=true">';
+    await chooseMode("Number bases");
+    assert(document.querySelector('input[name="entropy-format"][value="bin"]')?.checked, "Binary was not the default number base");
+    document.querySelector('input[name="entropy-format"][value="hex"]').click();
+    const hex = await until(() => document.getElementById("hex"), "hex input");
+    input(hex, payload + "0000");
+    assert(!/[<>="']/.test(hex.value), "Dangerous characters remained in hex input");
+    await chooseMode("Seed phrase");
+    const seed = await until(() => document.getElementById("seed"), "seed input");
+    input(seed, payload + "abandon");
+    assert(!/[<>="']/.test(seed.value), "Dangerous characters remained in seed input");
+    input(seed, "ABANDON Ability");
+    equal(seed.value, "abandon ability");
+    input(seed, "amou");
+    seed.focus();
+    seed.setSelectionRange(seed.value.length, seed.value.length);
+    const autocomplete = document.getElementById("seed-autocomplete");
+    assert(!autocomplete.checked, "Seed autocomplete unexpectedly started enabled");
+    autocomplete.click();
+    equal(seed.value, "amount ");
+    autocomplete.click();
+    input(seed, "");
+    const keyboardToggle = document.getElementById("seed-keyboard-toggle");
+    const keyboard = document.getElementById("seed-keyboard");
+    assert(keyboardToggle?.querySelector("svg") && keyboard?.hidden, "Seed keyboard toggle or custom SVG is missing");
+    keyboardToggle.click();
+    assert(!keyboard.hidden && keyboardToggle.getAttribute("aria-expanded") === "true", "Seed keyboard did not open");
+    const keyboardRows = [...keyboard.querySelectorAll("[data-seed-keyboard-row]")];
+    equal([...keyboardRows[0].querySelectorAll("[data-seed-key]")].map((button) => button.textContent).join(""), "abcdefghij");
+    equal([...keyboardRows[1].querySelectorAll("[data-seed-key]")].map((button) => button.textContent).join(""), "klmnopqrs");
+    equal([...keyboardRows[2].querySelectorAll("[data-seed-key]")].map((button) => button.textContent).join(""), "tuvwxyz");
+    assert(!keyboard.querySelector('[data-seed-key="a"]').disabled, "A valid initial BIP39 letter was disabled");
+    assert(keyboard.querySelector('[data-seed-key="x"]').disabled, "A letter that cannot start a BIP39 word was enabled");
+    assert(keyboard.querySelector(".seed-keyboard-space").disabled, "Space was enabled before a complete word");
+    assert(keyboard.querySelector("[data-seed-delete]").disabled, "Delete was enabled for an empty input");
+    const keyboardMode = keyboard.querySelector("[data-seed-keyboard-mode]");
+    const lowerDeleteLeft = keyboard.querySelector("[data-seed-delete]").getBoundingClientRect().left;
+    assert(keyboardMode.disabled && keyboardMode.textContent === "aA1", "Keyboard mode control is not disabled by default");
+    keyboardMode.disabled = false;
+    keyboardMode.click();
+    equal([...keyboardRows[0].querySelectorAll("[data-seed-character-key]")].map((button) => button.textContent).join(""), "ABCDEFGHIJ");
+    keyboardMode.click();
+    equal([...keyboardRows[0].querySelectorAll("[data-seed-character-key]")].map((button) => button.textContent).join(""), "1234567890");
+    equal([...keyboardRows[1].querySelectorAll("[data-seed-character-key]")].map((button) => button.textContent).join(""), "!@#$%^&*()");
+    equal([...keyboardRows[2].querySelectorAll("[data-seed-character-key]")].map((button) => button.textContent).join(""), "-_+=/?\\");
+    equal(keyboardRows[1].querySelectorAll("button:not([hidden])").length, 10);
+    equal(keyboardRows[2].querySelectorAll("button:not([hidden])").length, 8);
+    assert(Math.abs(keyboard.querySelector("[data-seed-delete]").getBoundingClientRect().left - lowerDeleteLeft) < 0.5, "Delete moved in symbol mode");
+    keyboardMode.click();
+    equal([...keyboardRows[0].querySelectorAll("[data-seed-character-key]")].map((button) => button.textContent).join(""), "abcdefghij");
+    keyboardMode.disabled = true;
+    for (const letter of "abandon") keyboard.querySelector(`[data-seed-key="${letter}"]`).click();
+    equal(seed.value, "abandon");
+    assert(!keyboard.querySelector(".seed-keyboard-space").disabled, "Space was disabled after a complete BIP39 word");
+    keyboard.querySelector(".seed-keyboard-space").click();
+    keyboard.querySelector('[data-seed-key="b"]').click();
+    equal(seed.value, "abandon b");
+    const thirdRowButtons = [...keyboardRows[2].querySelectorAll("button:not([hidden])")];
+    assert(thirdRowButtons.at(-2)?.dataset.seedKey === "z" && thirdRowButtons.at(-1)?.hasAttribute("data-seed-delete"), "Delete is not directly after z");
+    thirdRowButtons.at(-1).click();
+    equal(seed.value, "abandon ");
+    input(seed, "abandon");
+    const deleteButton = keyboard.querySelector("[data-seed-delete]");
+    deleteButton.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 17 }));
+    await wait(650);
+    deleteButton.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, pointerId: 17 }));
+    // Browsers synthesize this click after a real pointer sequence. Dispatch it
+    // explicitly here so the long-press suppression state cannot leak onward.
+    deleteButton.click();
+    assert(seed.value.length <= 5, "Holding delete did not repeat after its initial delay");
+    const passphraseKeyboardInput = document.getElementById("pass");
+    input(passphraseKeyboardInput, "");
+    passphraseKeyboardInput.focus();
+    assert(!keyboardMode.disabled, "Character mode remained disabled for the passphrase");
+    keyboard.querySelector('[data-seed-key="a"]').click();
+    keyboardMode.click();
+    keyboard.querySelector('[data-seed-key="A"]').click();
+    keyboardMode.click();
+    keyboard.querySelector('[data-seed-key="1"]').click();
+    keyboard.querySelector('[data-seed-key="!"]').click();
+    keyboard.querySelector(".seed-keyboard-space").click();
+    equal(passphraseKeyboardInput.value, "aA1! ");
+    deleteButton.click();
+    equal(passphraseKeyboardInput.value, "aA1!");
+    input(passphraseKeyboardInput, "");
+    seed.focus();
+    // Firefox's headless focus transition can update activeElement without
+    // delivering focus to this textarea; exercise the application handler.
+    seed.dispatchEvent(new FocusEvent("focus"));
+    assert(
+      keyboardMode.disabled && keyboard.dataset.seedKeyboardLayout === "lower",
+      "Seed focus did not restore lowercase-only mode",
+    );
+    await chooseMode("Private key");
+    const key = await until(() => document.getElementById("key"), "private-key input");
+    input(key, payload);
+    assert(!/[<>="']/.test(key.value), "Dangerous characters remained in private-key input");
+    assert(!document.querySelector('img[src="x"]') && window.__browserTestInjected !== true, "Input executed markup");
+  });
+
+  await test("cards hide dealt values by default and one valid card enables a testing seed", async () => {
+    await chooseMode("Cards");
+    const cards = await until(() => document.getElementById("cards"), "card transcript input");
+    const dealt = document.getElementById("dealt-cards");
+    const show = document.getElementById("show-cards");
+    const undo = document.getElementById("card-undo");
+    assert(show && !show.checked && dealt.hidden, "Dealt cards were not hidden by default");
+    equal(undo.getAttribute("aria-label"), "Undo last card");
+    assert(undo.querySelector("svg"), "Card undo does not use the keyboard delete icon");
+    assert(Math.abs(undo.getBoundingClientRect().width - document.querySelector(".card-rank-pad button").getBoundingClientRect().width) < 0.5, "Card undo does not match the rank-button width");
+    assert(Boolean(cards.compareDocumentPosition(document.getElementById("cards-meta")) & Node.DOCUMENT_POSITION_FOLLOWING), "Card status is not below the transcript input");
+    assert(Boolean(document.getElementById("cards-meta").compareDocumentPosition(document.querySelector(".card-suit-pad")) & Node.DOCUMENT_POSITION_FOLLOWING), "Card status is not above the card buttons");
+    assert(Boolean(cards.compareDocumentPosition(document.querySelector(".card-suit-pad")) & Node.DOCUMENT_POSITION_FOLLOWING), "Card buttons are not below the transcript input");
+    assert(Boolean(document.querySelector(".card-rank-pad").compareDocumentPosition(undo) & Node.DOCUMENT_POSITION_FOLLOWING), "Undo is not below the card ranks");
+    assert(Boolean(undo.compareDocumentPosition(show) & Node.DOCUMENT_POSITION_FOLLOWING), "Undo is not left of Show cards");
+    assert(Boolean(show.compareDocumentPosition(dealt) & Node.DOCUMENT_POSITION_FOLLOWING), "Card controls are not above the dealt cards");
+    assert(Boolean(dealt.compareDocumentPosition(document.getElementById("dice-words")) & Node.DOCUMENT_POSITION_FOLLOWING), "Dealt cards are not above the seed words");
+    show.click();
+    assert(dealt.textContent.includes("First shuffle · No cards yet"), "Empty card history message is missing");
+    const emptyHistoryHeight = dealt.getBoundingClientRect().height;
+    input(cards, "as");
+    await wait(0);
+    equal(cards.value, "AS");
+    assert(!document.getElementById("go").disabled, "One valid card did not enable derivation");
+    assert(document.getElementById("cards-meta").textContent.includes("seed available for testing"), "One-card warning is missing");
+    equal([...document.querySelectorAll("#dice-words [data-word]")].filter((word) => word.textContent !== "—").length, 24);
+    const cardCopy = document.querySelector('[data-copy-seed-phrase]');
+    assert(cardCopy && !cardCopy.disabled && cardCopy.dataset.phrase.split(" ").length === 24, "Testing seed preview was not copyable");
+    assert(!dealt.hidden && dealt.textContent.includes("A"), "Show cards did not reveal the dealt card");
+    equal(dealt.getBoundingClientRect().height, emptyHistoryHeight);
+    input(cards, "AS ZZ");
+    await wait(0);
+    assert(document.querySelector("#cards-highlight .dice-roll-invalid")?.textContent === "ZZ", "Invalid card was not highlighted red");
+    assert(document.getElementById("go").disabled && document.getElementById("cards-meta").classList.contains("err"), "Invalid card did not disable derivation");
+    input(cards, "AS AS");
+    assert(document.querySelector("#cards-highlight .dice-roll-invalid")?.textContent === "AS", "Repeated card was not highlighted red");
+    input(cards, "as, 10♥; td");
+    await wait(0);
+    equal(cards.value, "AS 10H TD");
+    assert(!document.getElementById("go").disabled, "Normalized valid cards did not enable derivation");
+    cards.focus();
+    const disallowed = new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "B" });
+    assert(cards.dispatchEvent(disallowed) === false, "A character unused by card transcripts was accepted from typing");
+    show.click();
+    input(cards, "");
+  });
+
+  await test("partial entropy word grids remain copyable", async () => {
+    await chooseMode("Number bases");
+    document.querySelector('input[name="entropy-format"][value="bin"]').click();
+    const binary = await until(() => document.getElementById("bin"), "binary entropy input");
+    input(binary, "00000000000");
+    await wait(0);
+    const copy = document.querySelector('[data-copy-seed-phrase]');
+    assert(copy && !copy.disabled, "Partial seed-word copy control remained disabled");
+    equal(copy.dataset.phrase, "abandon");
+    input(binary, "");
+  });
+
+  await test("all six number bases preserve the same exact entropy", async () => {
+    document.querySelector('[data-seed-words="12"]').click();
+    await chooseMode("Number bases");
+    const cases = [
+      ["bin", 128, "0"],
+      ["base4", 64, "0"],
+      ["base8", 43, "0"],
+      ["hex", 32, "0"],
+      ["base32", 28, "0"],
+      ["base64", 23, "A"],
+    ];
+    equal(document.querySelectorAll('input[name="entropy-format"]').length, 6);
+    for (const [format, count, zero] of cases) {
+      document.querySelector(`input[name="entropy-format"][value="${format}"]`).click();
+      const field = await until(() => document.getElementById(format), `${format} entropy input`);
+      input(field, format === "base64" ? `${zero.repeat(21)}00` : zero.repeat(count));
+      await wait(0);
+      assert(!document.getElementById("go").disabled, `${format} did not accept exact zero entropy`);
+      equal(document.querySelector("#entropy-words [data-word]").textContent, "abandon");
+    }
+    const sync = document.getElementById("sync-number-bases");
+    assert(sync && !sync.checked, "Number-base syncing did not start opt-in");
+    sync.click();
+    await wait(0);
+    const syncStatus = document.getElementById("number-base-sync-status");
+    assert(syncStatus && !syncStatus.hidden && syncStatus.textContent.includes("Synced"), "Complete entropy did not show the synced confirmation");
+    document.querySelector('input[name="entropy-format"][value="hex"]').click();
+    const syncedHex = await until(() => document.getElementById("hex"), "synced hex input");
+    equal(syncedHex.value, "0".repeat(32));
+    assert(document.getElementById("sync-number-bases").checked, "Sync preference did not persist between formats");
+    document.querySelector('input[name="entropy-format"][value="base8"]').click();
+    const base8 = await until(() => document.getElementById("base8"), "Base 8 entropy input");
+    input(base8, `${"0".repeat(42)}4`);
+    await wait(0);
+    assert(document.getElementById("go").disabled, "Base 8 accepted a final value outside its two-bit range");
+    equal(document.querySelector("#entropy-input-highlight .dice-roll-invalid")?.textContent, "4");
+    input(base8, "0".repeat(42));
+    assert(document.querySelector('[data-entropy-digit="4"]').disabled, "Invalid final Base 8 digit remained enabled");
+    assert(!document.querySelector('[data-entropy-digit="2"]').disabled, "Valid final Base 8 digit was disabled");
+    document.querySelector('input[name="entropy-format"][value="base32"]').click();
+    const base32 = await until(() => document.getElementById("base32"), "Base32 entropy input");
+    input(base32, `o${"0".repeat(27)}`);
+    await wait(0);
+    assert(base32.value.startsWith("0") && !document.getElementById("go").disabled, "Crockford O alias did not normalize to 0");
+    document.querySelector('[data-seed-words="24"]').click();
+    const base32For24 = await until(() => document.getElementById("base32"), "24-word Base32 input");
+    input(base32For24, "0".repeat(51));
+    assert(document.getElementById("entropy-meta").textContent.includes("coin flip 1 of 1 · Heads (0) or Tails (1)"), "Base32 progress did not switch to coin-flip guidance");
+    assert(document.querySelector(".entropy-keypad").classList.contains("coin-phase"), "Base32 keypad did not switch to its coin-flip layout");
+    equal(document.querySelector('[data-entropy-digit="0"]').textContent, "Heads (0)");
+    equal(document.querySelector('[data-entropy-digit="1"]').textContent, "Tails (1)");
+    assert(!document.querySelector('[data-entropy-digit="1"]').disabled, "Final binary 1 was disabled for 24-word Base32");
+    assert(document.querySelector('[data-entropy-digit="2"]').disabled, "A non-binary final Base32 character remained enabled");
+    input(base32For24, `${"0".repeat(51)}1`);
+    await wait(0);
+    assert(!document.getElementById("go").disabled, "24-word Base32 did not accept a final single entropy bit");
+    document.getElementById("sync-number-bases").click();
+    input(base32For24, "0".repeat(51));
+    document.getElementById("sync-number-bases").click();
+    assert(document.getElementById("sync-number-bases").checked, "Sync did not turn back on for incomplete entropy");
+    assert(document.getElementById("number-base-sync-status").hidden, "Incomplete entropy incorrectly remained marked as synced");
+    document.querySelector('input[name="entropy-format"][value="hex"]').click();
+    const preservedHex = await until(() => document.getElementById("hex"), "preserved synchronized hex input");
+    assert(preservedHex.value.length === 64, "Re-enabling sync with an incomplete source blanked another representation");
+    document.querySelector('input[name="entropy-format"][value="base32"]').click();
+    const preservedBase32 = await until(() => document.getElementById("base32"), "preserved incomplete Base32 input");
+    equal(preservedBase32.value, "0".repeat(51));
+    input(preservedBase32, "");
+  });
+
+  await test("Base64 uses the shared case, number, and symbol keyboard", async () => {
+    document.querySelector('input[name="entropy-format"][value="base64"]').click();
+    const base64 = await until(() => document.getElementById("base64"), "Base64 input");
+    input(base64, "");
+    const toggle = document.getElementById("base64-keyboard-toggle");
+    const keyboard = document.getElementById("base64-keyboard");
+    assert(toggle && keyboard, "Base64 keyboard control is missing");
+    if (keyboard.hidden) toggle.click();
+    const mode = keyboard.querySelector("[data-seed-keyboard-mode]");
+    while (keyboard.dataset.seedKeyboardLayout !== "lower") mode.click();
+    [...keyboard.querySelectorAll("[data-seed-character-key]")].find((key) => key.dataset.seedKey === "a").click();
+    mode.click();
+    [...keyboard.querySelectorAll("[data-seed-character-key]")].find((key) => key.dataset.seedKey === "A").click();
+    mode.click();
+    const characterKey = (character) => [...keyboard.querySelectorAll("[data-seed-character-key]")].find((key) => key.dataset.seedKey === character);
+    assert(characterKey("+") && !characterKey("+").disabled && characterKey("/") && !characterKey("/").disabled, "RFC 4648 symbols are unavailable");
+    assert(characterKey("!").disabled, "A symbol outside the Base64 alphabet remained enabled");
+    characterKey("+").click();
+    characterKey("/").click();
+    equal(base64.value, "aA+/");
+    input(base64, "A".repeat(42));
+    assert(document.getElementById("entropy-meta").textContent.includes("coin flip 1 of 4 · Heads (0) or Tails (1)"), "Base64 progress did not switch to coin-flip guidance");
+    assert(!characterKey("0").disabled && !characterKey("1").disabled, "Base64 coin-flip keys were disabled");
+    assert(characterKey("+").disabled, "Base64 symbol key remained enabled during the coin-flip phase");
+    if (!keyboard.hidden) toggle.click();
+    input(base64, "");
+  });
+
+  await test("pasting a complete seed phrase computes final-word candidates once", async () => {
+    await chooseMode("Seed phrase");
+    const seed = await until(() => document.getElementById("seed"), "seed input");
+    const phrase = [...Array(23).fill("abandon"), "art"].join(" ");
+    const partial = phrase.split(" ").slice(0, 23);
+    crypto.clearLastWordCache();
+    const started = performance.now();
+    input(seed, phrase);
+    const pasteMilliseconds = performance.now() - started;
+    const fast = crypto.computeTargetLastWords(partial, 24);
+    const cached = crypto.computeTargetLastWords(partial, 24);
+    const bruteStarted = performance.now();
+    const brute = crypto.bruteTargetLastWords(partial.join(" "));
+    const bruteMilliseconds = performance.now() - bruteStarted;
+    equal(JSON.stringify(fast.candidates), JSON.stringify(brute.candidates), "Optimized final-word candidates differ from BIP39 validation");
+    assert(fast === cached, "Final-word candidates were recomputed instead of cached");
+    assert(fast.candidates.includes("art") && crypto.validateTargetMnemonic(phrase, 24).ok, "The public 24-word test vector was not recognized as checksum-valid");
+    assert(pasteMilliseconds < Math.max(250, bruteMilliseconds), `Seed paste remained slow (${pasteMilliseconds.toFixed(1)} ms; brute force ${bruteMilliseconds.toFixed(1)} ms)`);
+    input(seed, "");
+  });
+
+  await test("theme toggle cycles dark, light, and system and persists the choice", () => {
+    const toggle = document.getElementById("theme-toggle");
+    const controls = document.querySelector(".download-controls");
+    const background = () => getComputedStyle(document.body).backgroundColor;
+    assert(toggle && controls.contains(toggle), "Theme toggle is missing from the download controls");
+    assert(Math.abs(toggle.getBoundingClientRect().right - controls.getBoundingClientRect().right) < 1, "Theme toggle is not at the right edge of its row");
+    try {
+      assert(toggle.dataset.themeMode === "dark" && !document.documentElement.dataset.theme, "Theme did not start dark");
+      const dark = background();
+      toggle.click();
+      assert(toggle.dataset.themeMode === "light" && document.documentElement.dataset.theme === "light", "Theme did not switch to light");
+      assert(background() !== dark, "Light theme did not change the page background");
+      assert(localStorage.getItem("entropylab-theme") === "light", "Light theme was not persisted");
+      toggle.click();
+      assert(toggle.dataset.themeMode === "system" && localStorage.getItem("entropylab-theme") === "system", "Theme did not switch to system");
+      toggle.click();
+      assert(toggle.dataset.themeMode === "dark" && !document.documentElement.dataset.theme && localStorage.getItem("entropylab-theme") === null, "Theme did not return to dark");
+      assert(background() === dark, "Dark theme background was not restored");
+    } finally {
+      localStorage.removeItem("entropylab-theme");
+    }
+  });
+
+  await test("dice, hex, seed, and private-key keyboard toggles share their open state", async () => {
+    await chooseMode("Seed phrase");
+    let toggle = await until(() => document.getElementById("seed-keyboard-toggle"), "seed keyboard toggle");
+    if (toggle.getAttribute("aria-expanded") === "true") toggle.click();
+
+    await chooseMode("Dice rolls");
+    const dice = await until(() => document.getElementById("dice"), "dice input");
+    const passphrase = document.getElementById("pass");
+    const passphraseTools = document.getElementById("passphrase-keyboard-toggle-host");
+    const fingerprintCards = document.getElementById("master-fingerprint-preview");
+    const keyboardHost = document.getElementById("passphrase-keyboard-host");
+    toggle = document.getElementById("passphrase-keyboard-toggle");
+    const bip39Passphrase = document.getElementById("passphrase-bip39-words");
+    let keyboard = keyboardHost?.querySelector("[data-on-screen-keyboard]");
+    assert(toggle?.querySelector("svg") && bip39Passphrase && keyboard, "Dice passphrase keyboard controls are missing");
+    assert(
+      passphraseTools.contains(toggle)
+        && passphraseTools.contains(bip39Passphrase)
+        && Boolean(toggle.compareDocumentPosition(passphrase) & Node.DOCUMENT_POSITION_FOLLOWING),
+      "Dice keyboard toggle and BIP39-word checkbox are not above the passphrase input",
+    );
+    assert(passphraseTools.getBoundingClientRect().bottom <= passphrase.getBoundingClientRect().top, "Passphrase tools overlap or follow the input");
+    assert(
+      Boolean(fingerprintCards.compareDocumentPosition(keyboardHost) & Node.DOCUMENT_POSITION_FOLLOWING),
+      "Passphrase keyboard is not below the master fingerprint cards",
+    );
+    assert(toggle.getAttribute("aria-expanded") === "false" && keyboard.hidden, "Dice keyboard did not start closed");
+    toggle.click();
+    assert(toggle.getAttribute("aria-expanded") === "true" && !keyboard.hidden, "Dice keyboard did not open");
+    assert(!keyboard.querySelector("[data-seed-keyboard-mode]").disabled, "Passphrase keyboard mode is disabled");
+    input(passphrase, "Abandon  zoo");
+    bip39Passphrase.click();
+    equal(passphrase.value, "Abandon  zoo", "Enabling BIP39-word mode changed an existing passphrase");
+    assert(document.getElementById("passphrase-highlight").querySelectorAll(".dice-roll-invalid").length >= 2, "Invalid passphrase capitalization and spacing were not highlighted");
+    assert(keyboard.querySelector("[data-seed-keyboard-mode]").disabled, "BIP39-word mode did not lock the keyboard to lowercase letters");
+    input(passphrase, "");
+    for (const character of "abandon") {
+      const key = keyboard.querySelector(`[data-seed-key="${character}"]`);
+      assert(key && !key.disabled, `Valid BIP39 continuation ${character} was disabled`);
+      key.click();
+    }
+    const passphraseHighlight = document.getElementById("passphrase-highlight");
+    const passphraseRect = passphrase.getBoundingClientRect();
+    const passphraseHighlightRect = passphraseHighlight.getBoundingClientRect();
+    equal(passphraseHighlight.textContent, "abandon", "Valid passphrase text was not mirrored visibly");
+    equal(getComputedStyle(passphrase).backgroundColor, "rgba(0, 0, 0, 0)", "Passphrase input obscures its highlighted text mirror");
+    assert(
+      Math.abs(passphraseRect.x - passphraseHighlightRect.x) < 0.5
+        && Math.abs(passphraseRect.y - passphraseHighlightRect.y) < 0.5
+        && Math.abs(passphraseRect.width - passphraseHighlightRect.width) < 0.5
+        && Math.abs(passphraseRect.height - passphraseHighlightRect.height) < 0.5,
+      "Passphrase input and highlighted text mirror are misaligned",
+    );
+    const passphraseSpace = keyboard.querySelector(".seed-keyboard-space");
+    assert(!passphraseSpace.disabled, "Space was disabled after a complete BIP39 passphrase word");
+    passphraseSpace.click();
+    assert(passphraseSpace.disabled, "Space remained enabled before the next BIP39 word");
+    bip39Passphrase.click();
+    input(passphrase, "");
+    input(dice, "");
+    keyboard.querySelector('[data-seed-key="a"]').click();
+    equal(passphrase.value, "a");
+    equal(dice.value, "");
+
+    await chooseMode("Number bases");
+    document.querySelector('input[name="entropy-format"][value="hex"]').click();
+    toggle = await until(() => document.getElementById("passphrase-keyboard-toggle"), "hex passphrase keyboard toggle");
+    keyboard = document.querySelector("#passphrase-keyboard-host [data-on-screen-keyboard]");
+    const hex = await until(() => document.getElementById("hex"), "hex input");
+    assert(toggle.getAttribute("aria-expanded") === "true" && !keyboard.hidden, "Hex keyboard did not retain the shared open state");
+    input(passphrase, "");
+    input(hex, "");
+    keyboard.querySelector('[data-seed-key="a"]').click();
+    equal(passphrase.value, "a");
+    equal(hex.value, "");
+    toggle.click();
+    assert(toggle.getAttribute("aria-expanded") === "false" && keyboard.hidden, "Hex keyboard did not close");
+
+    await chooseMode("Seed phrase");
+    toggle = await until(() => document.getElementById("seed-keyboard-toggle"), "seed keyboard toggle");
+    keyboard = document.getElementById("seed-keyboard");
+    assert(toggle.getAttribute("aria-expanded") === "false" && keyboard.hidden, "Seed keyboard did not inherit the shared closed state");
+    toggle.click();
+    await chooseMode("Dice rolls");
+    toggle = document.getElementById("passphrase-keyboard-toggle");
+    keyboard = document.querySelector("#passphrase-keyboard-host [data-on-screen-keyboard]");
+    assert(toggle.getAttribute("aria-expanded") === "true" && !keyboard.hidden, "Dice keyboard did not inherit the Seed toggle state");
+
+    await chooseMode("Private key");
+    toggle = await until(() => document.getElementById("private-keyboard-toggle"), "private-key keyboard toggle");
+    keyboard = document.querySelector("#passphrase-keyboard-host [data-on-screen-keyboard]");
+    const privateKey = document.getElementById("key");
+    assert(toggle.getAttribute("aria-expanded") === "true" && !keyboard.hidden, "Private-key keyboard did not inherit the shared open state");
+    assert(
+      Boolean(document.getElementById("private-key-input-help").compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING)
+        && Boolean(toggle.compareDocumentPosition(privateKey) & Node.DOCUMENT_POSITION_FOLLOWING),
+      "Private-key keyboard toggle is not immediately above its input",
+    );
+    input(passphrase, "");
+    input(privateKey, "");
+    document.querySelector('input[name="kk"][value="hex-key"]').click();
+    const privateMeta = document.getElementById("private-key-meta");
+    const privateHighlight = document.getElementById("private-key-highlight");
+    const hexKeypad = keyboard.querySelector("[data-private-key-hex-keypad]");
+    assert(hexKeypad && !hexKeypad.hidden, "Private key Hex did not show its two-row keypad");
+    hexKeypad.querySelector('[data-seed-key="a"]').click();
+    equal(privateKey.value, "a");
+    assert(privateMeta.textContent.includes("1 of 64 hexadecimal characters entered") && privateMeta.textContent.includes("63 remaining"), "Hex progress did not report entered and remaining characters");
+    equal(passphrase.value, "");
+    const mode = keyboard.querySelector("[data-seed-keyboard-mode]");
+    assert(mode.closest(".seed-keyboard-space-row").hidden, "The character-mode control remained visible for Hex");
+    hexKeypad.querySelector('[data-seed-key="f"]').click();
+    equal(privateKey.value, "af");
+    input(privateKey, "");
+    equal([...hexKeypad.querySelectorAll("[data-private-key-hex-character]")].map((button) => button.dataset.seedKey).join(""), "0123456789abcdef");
+    input(privateKey, "0".repeat(63) + "g");
+    assert(privateMeta.textContent.includes("63 of 64 hexadecimal characters entered") && privateMeta.textContent.includes("1 invalid character highlighted"), "Invalid Hex progress was not descriptive");
+    equal(privateHighlight.querySelector(".dice-roll-invalid")?.textContent, "g");
+    input(privateKey, "1".repeat(65));
+    assert(privateMeta.textContent.includes("65 hexadecimal characters entered") && privateMeta.textContent.includes("1 extra highlighted"), "Excess Hex progress was not descriptive");
+    equal(privateHighlight.querySelector(".dice-roll-invalid")?.textContent, "1");
+    input(privateKey, "0".repeat(63) + "1");
+    assert(privateMeta.classList.contains("ok") && privateMeta.textContent.includes("ready to derive"), "Complete Hex progress did not report ready");
+    document.querySelector('input[name="kk"][value="wif"]').click();
+    equal(privateKey.value, "", "Hex input leaked into the empty WIF input");
+    privateKey.value = "0".repeat(63) + "1";
+    privateKey.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: privateKey.value }));
+    assert(document.querySelector('input[name="kk"][value="hex-key"]').checked, "A pasted hexadecimal key did not select Hex");
+    assert(crypto.privateKeyInputIsValid(), "A valid hexadecimal key was rejected with Hex selected");
+    document.querySelector('input[name="kk"][value="wif"]').click();
+    equal(privateKey.value, "", "Auto-detected Hex input leaked into WIF");
+    assert(!crypto.privateKeyInputIsValid(), "A hexadecimal key was accepted with WIF selected");
+    input(privateKey, "");
+    document.querySelector('input[name="kk"][value="wif"]').click();
+    let initialRow = keyboard.querySelector("[data-private-key-initial-row]");
+    let initialKeys = [...initialRow.querySelectorAll("[data-private-key-initial]:not([hidden])")];
+    equal(initialKeys.map((button) => button.dataset.seedKey).join(""), "5KL");
+    assert(!initialRow.hidden && keyboard.classList.contains("private-key-initial-options"), "WIF did not replace the full keypad with initial-character choices");
+    assert([...keyboard.querySelectorAll("[data-seed-keyboard-row],.seed-keyboard-space-row")].every((row) => row.hidden), "The full WIF keypad remained visible before its first character");
+    initialKeys.find((button) => button.dataset.seedKey === "K").click();
+    assert(initialRow.hidden && !keyboard.classList.contains("private-key-initial-options"), "The full WIF keypad did not return after choosing a prefix");
+    assert(!keyboard.querySelector('[data-seed-key="G"]').disabled, "A valid WIF continuation was disabled");
+    assert(keyboard.querySelector('[data-seed-key="I"]').disabled && keyboard.querySelector('[data-seed-key="O"]').disabled, "Base58-confusable WIF characters were enabled");
+    assert(keyboard.querySelector(".seed-keyboard-space").disabled, "Space was enabled for WIF");
+    document.querySelector('input[name="kk"][value="minikey"]').click();
+    equal(privateKey.value, "", "WIF input leaked into the empty Mini-key input");
+    initialKeys = [...initialRow.querySelectorAll("[data-private-key-initial]:not([hidden])")];
+    equal(initialKeys.map((button) => button.dataset.seedKey).join(""), "S");
+    assert(!initialRow.hidden && [...keyboard.querySelectorAll("[data-seed-keyboard-row],.seed-keyboard-space-row")].every((row) => row.hidden), "Mini key did not show only its required S prefix");
+    initialKeys[0].click();
+    document.querySelector('input[name="kk"][value="wif"]').click();
+    equal(privateKey.value, "K", "WIF input was not restored after switching methods");
+    document.querySelector('input[name="kk"][value="minikey"]').click();
+    equal(privateKey.value, "S", "Mini-key input was not restored after switching methods");
+    assert(!keyboard.querySelector('[data-seed-key="A"]').disabled, "A valid Mini key continuation was disabled");
+    assert(keyboard.querySelector('[data-seed-key="I"]').disabled && keyboard.querySelector('[data-seed-key="O"]').disabled, "Base58-confusable Mini key letters were enabled");
+    mode.click();
+    assert(!keyboard.querySelector('[data-seed-key="1"]').disabled && keyboard.querySelector('[data-seed-key="0"]').disabled, "Mini key number restrictions are wrong");
+    assert(keyboard.querySelector('[data-seed-key="!"]').disabled && keyboard.querySelector(".seed-keyboard-space").disabled, "Mini key symbols or space were enabled");
+    input(privateKey, "S6c56bnXQiBjk9mqSYE7ykVQ7NzrRy");
+    assert(crypto.privateKeyInputIsValid(), "A canonical Casascius Mini key was rejected");
+    input(privateKey, "SOc56bnXQiBjk9mqSYE7ykVQ7NzrRy");
+    assert(!crypto.privateKeyInputIsValid(), "A Mini key containing a Base58-forbidden O was accepted");
+    input(privateKey, "");
+    document.querySelector('input[name="kk"][value="brain"]').click();
+    equal(privateKey.value, "", "Mini-key input leaked into the empty brain-wallet input");
+    assert([...keyboard.querySelectorAll("[data-seed-character-key]")].every((button) => !button.disabled), "Brain-wallet characters were restricted");
+    assert(!keyboard.querySelector(".seed-keyboard-space").disabled, "Brain-wallet space was disabled");
+    input(privateKey, "isolated brain wallet recovery phrase");
+    document.querySelector('input[name="kk"][value="wif"]').click();
+    equal(privateKey.value, "K", "WIF input was not preserved separately from the brain-wallet input");
+    document.querySelector('input[name="kk"][value="brain"]').click();
+    equal(privateKey.value, "isolated brain wallet recovery phrase", "Brain-wallet input was not restored after switching methods");
+    input(privateKey, "");
+    document.querySelector('input[name="kk"][value="wif"]').click();
+    input(privateKey, "");
+    document.querySelector('input[name="kk"][value="hex-key"]').click();
+    input(privateKey, "");
+    document.querySelector('input[name="kk"][value="minikey"]').click();
+    input(privateKey, "");
+    document.querySelector('input[name="kk"][value="wif"]').click();
+    toggle.click();
+    await chooseMode("Seed phrase");
+    toggle = document.getElementById("seed-keyboard-toggle");
+    keyboard = document.getElementById("seed-keyboard");
+    assert(toggle.getAttribute("aria-expanded") === "false" && keyboard.hidden, "Seed keyboard did not inherit the Private-key toggle state");
+    input(passphrase, "");
+  });
+
+  await test("dice fairness panel stays hidden until the Die Distribution / Fairness Analysis text button expands it", async () => {
+    await chooseMode("Dice rolls");
+    const dice = await until(() => document.getElementById("dice"), "dice input");
+    const panel = await until(() => document.getElementById("dice-fairness"), "dice fairness panel");
+    const toggle = await until(() => document.getElementById("dice-fairness-toggle"), "dice fairness toggle");
+    const glyph = toggle.querySelector("[data-dice-fairness-glyph]");
+    assert(toggle.textContent.includes("Die Distribution / Fairness Analysis") && glyph && glyph.textContent === "▸", "Fairness toggle did not use a text glyph and Die Distribution / Fairness Analysis label");
+    assert(toggle.closest(".seed-word-copy-row")?.querySelector(":scope > .seed-phrase-copy"), "Fairness toggle did not share the copy row");
+    input(dice, "");
+    assert(panel.hidden && toggle.getAttribute("aria-expanded") === "false", "Empty rolls still showed the fairness panel");
+    input(dice, "123456".repeat(5));
+    assert(panel.hidden, "Uniform d6 rolls opened the fairness panel without the expand button");
+    toggle.click();
+    assert(!panel.hidden && toggle.getAttribute("aria-expanded") === "true" && glyph.textContent === "▾", "Die Distribution / Fairness Analysis button did not expand the fairness panel");
+    assert(panel.textContent.includes("Looks pretty fair"), "Uniform d6 was not reported as fair");
+    assert(panel.textContent.includes("D6"), "D6 fairness test was missing");
+    input(dice, "1".repeat(30));
+    assert(!panel.hidden, "Expanded fairness panel collapsed after more rolls");
+    assert(panel.textContent.includes("Looks biased"), "Constant d6 face was not reported as biased");
+    toggle.click();
+    assert(panel.hidden && toggle.getAttribute("aria-expanded") === "false" && glyph.textContent === "▸", "Die Distribution / Fairness Analysis button did not collapse the fairness panel");
+    input(dice, "");
+    assert(panel.hidden, "Cleared rolls did not keep the fairness panel hidden");
+  });
+
+  await test("dice, binary, passphrase, multisig, and PSBT inputs cannot inject markup", async () => {
+    const payload = '<img src=x onerror="window.__browserTestInjected=true">';
+    await chooseMode("Dice rolls");
+    const dice = await until(() => document.getElementById("dice"), "dice input");
+    input(dice, payload + "123456");
+    assert(!/[<>="']/.test(dice.value), "Dangerous characters remained in dice input");
+    await chooseMode("Number bases");
+    document.querySelector('input[name="entropy-format"][value="bin"]').click();
+    const binary = await until(() => document.getElementById("bin"), "binary input");
+    input(binary, payload + "010101");
+    assert(!/[<>="']/.test(binary.value), "Dangerous characters remained in binary input");
+    const passphrase = document.getElementById("pass");
+    input(passphrase, payload);
+    assert(!document.querySelector('img[src="x"]'), "Passphrase created markup");
+    input(passphrase, "");
+    document.querySelector('#workspace [data-workspace="msig"]').click();
+    const xpub = await until(() => document.querySelector("#msig-keys textarea"), "multisig input");
+    input(xpub, payload + "tpub123");
+    assert(!/[<>="']/.test(xpub.value), "Dangerous characters remained in multisig input");
+    document.querySelector('#workspace [data-workspace="psbt"]').click();
+    const psbt = await until(() => document.getElementById("psbt-text"), "PSBT input");
+    input(psbt, payload);
+    document.getElementById("psbt-go").click();
+    await until(() => document.getElementById("psbt-error").textContent, "PSBT rejection");
+    assert(!document.querySelector("#psbt-card img") && window.__browserTestInjected !== true, "Input executed markup");
+    document.querySelector('#workspace [data-workspace="calc"]').click();
+    await until(() => !document.getElementById("calc-card").hidden, "key workspace");
+  });
+
+  await test("a known BIP39 wallet can be derived through the UI", async () => {
+    document.querySelector('[data-seed-words="12"]').click();
+    await chooseMode("Number bases");
+    document.querySelector('input[name="entropy-format"][value="hex"]').click();
+    const hex = await until(() => document.getElementById("hex"), "hex input");
+    input(hex, vectors[0].entropy);
+    const scriptType = document.getElementById("script-type");
+    scriptType.value = "bip44";
+    scriptType.dispatchEvent(new Event("change", { bubbles: true }));
+    const network = document.getElementById("network");
+    assert(network && [...network.options].some((option) => option.value === "testnet"), "Network selector is missing or has no testnet option");
+    network.value = "testnet";
+    network.dispatchEvent(new Event("change", { bubbles: true }));
+    const derive = await until(() => !document.getElementById("go").disabled && document.getElementById("go"), "derive button");
+    derive.click();
+    await until(() => document.getElementById("save") || document.getElementById("error").textContent, "wallet result");
+    assert(!document.getElementById("error").textContent, "Wallet derivation failed");
+  });
+
+  await test("Legacy key derivation exports BIP87 and can derive a 1-of-1 Legacy BIP87 wallet", async () => {
+    const exportRow = [...document.querySelectorAll("#acct p")].find((row) =>
+      row.textContent.includes("Legacy · BIP87 · Account 0")
+    );
+    assert(exportRow, "Legacy account result did not show its BIP87 co-signer export");
+    const bip87Export = exportRow.querySelector(".mono")?.textContent.trim();
+    assert(/^\[[0-9a-f]{8}\/87h\/1h\/0h\]tpub/.test(bip87Export || ""), "BIP87 testnet origin or account key is wrong");
+    const nativeTab = [...document.querySelectorAll("#acct-tabs button")].find((button) => button.textContent.includes("Native SegWit"));
+    assert(nativeTab, "Native SegWit account tab is missing");
+    nativeTab.click();
+    const bip48Row = await until(
+      () => [...document.querySelectorAll("#acct p")].find((row) => row.textContent.includes("Native SegWit · BIP48")),
+      "Native SegWit BIP48 co-signer export",
+    );
+    const bip48Export = bip48Row.querySelector(".mono")?.textContent.trim();
+    assert(/^\[[0-9a-f]{8}\/48h\/1h\/0h\/2h\]Vpub/.test(bip48Export || ""), "BIP48 testnet origin or account key is wrong");
+
+    document.querySelector('#workspace [data-workspace="msig"]').click();
+    await until(() => !document.getElementById("msig-card").hidden, "multisig workspace");
+    const multisigScript = document.getElementById("msig-script-type");
+    multisigScript.value = "p2sh";
+    multisigScript.dispatchEvent(new Event("change", { bubbles: true }));
+    const bip87Toggle = document.getElementById("msig-legacy-bip87");
+    assert(!document.getElementById("msig-legacy-account-toggle").hidden, "BIP87 option stayed hidden for Legacy");
+    bip87Toggle.checked = true;
+    bip87Toggle.dispatchEvent(new Event("change", { bubbles: true }));
+    const multisigNetwork = document.getElementById("msig-network");
+    multisigNetwork.value = "testnet";
+    multisigNetwork.dispatchEvent(new Event("change", { bubbles: true }));
+    input(document.getElementById("msig-m"), "4");
+    equal(document.getElementById("msig-m").value, "4");
+    equal(document.getElementById("msig-n").value, "4");
+    equal(document.querySelectorAll("#msig-keys textarea").length, 4);
+    input(document.getElementById("msig-n"), "2");
+    equal(document.getElementById("msig-m").value, "2");
+    equal(document.getElementById("msig-n").value, "2");
+    equal(document.querySelectorAll("#msig-keys textarea").length, 2);
+    input(document.getElementById("msig-n-number"), "2");
+    input(document.getElementById("msig-x-0"), bip87Export);
+    input(document.getElementById("msig-x-1"), bip48Export);
+    equal(multisigScript.value, "mixed");
+    assert(
+      document.getElementById("msig-script-warning").textContent.includes("cannot be combined here with BIP48 keys"),
+      "BIP87 and BIP48 keys did not show an explicit incompatibility",
+    );
+    input(document.getElementById("msig-x-1"), "");
+    input(document.getElementById("msig-n-number"), "1");
+    equal(document.getElementById("msig-m").value, "1");
+    equal(document.getElementById("msig-n").value, "1");
+    equal(document.querySelectorAll("#msig-keys textarea").length, 1);
+    input(document.getElementById("msig-x-0"), bip87Export);
+    const deriveMultisig = await until(() => !document.getElementById("msig-go").disabled && document.getElementById("msig-go"), "1-of-1 BIP87 derive button");
+    deriveMultisig.click();
+    await until(() => document.querySelector("#out .account-result-card") || document.getElementById("msig-error").textContent, "1-of-1 BIP87 result");
+    assert(!document.getElementById("msig-error").textContent, "1-of-1 BIP87 derivation failed");
+    const resultText = document.getElementById("out").textContent;
+    assert(resultText.includes("1-of-1 multisig · BIP87"), "Result did not identify the 1-of-1 BIP87 policy");
+    assert(resultText.includes("/87h/1h/0h") && resultText.includes("/<0;1>/*"), "BIP87 wallet descriptor paths are wrong");
+
+    document.querySelector('#workspace [data-workspace="calc"]').click();
+    await until(() => !document.getElementById("calc-card").hidden, "key workspace");
+  });
+
+  await test("watch-only export omits private recovery material", async () => {
+    state.lastBlob = null;
+    state.downloadName = "";
+    document.getElementById("save").click();
+    const blob = await until(() => state.lastBlob, "watch-only export");
+    const text = await blob.text();
+    assert(state.downloadName === "bitcoin-recovery-sheet.txt", "Unexpected filename");
+    assert(text.includes(versionHeader) && text.includes("Network: testnet"), "Export headers are missing");
+    assert(text.includes("PRIVATE RECOVERY MATERIAL OMITTED"), "Omission notice is missing");
+    assert(!text.includes("YOUR SEED PHRASE") && !text.includes("MASTER SEED HEX") && !text.includes("BIP32 ROOT TPRV"), "Watch-only export leaked private data");
+
+    const datButton = await until(() => document.getElementById("download-wallet-dat"), "watch-only wallet.dat button");
+    assert(/watch-only/i.test(datButton.textContent), "wallet.dat button should offer the watch-only wallet while secrets are hidden");
+    state.lastBlob = null;
+    state.downloadName = "";
+    datButton.click();
+    const dat = await (await until(() => state.lastBlob, "watch-only wallet.dat")).text();
+    assert(state.downloadName === "watch-only-wallet.dat", "Unexpected wallet.dat filename");
+    assert(dat.startsWith("SQLite format 3"), "wallet.dat is not a SQLite database");
+    assert(dat.includes("walletdescriptor") && dat.includes("wpkh([") && dat.includes("tr(["), "wallet.dat is missing descriptor records");
+    assert(dat.includes("activeexternalspk") && dat.includes("activeinternalspk"), "wallet.dat is missing active script records");
+    assert(!dat.includes("walletdescriptorkey"), "Watch-only wallet.dat leaked private key records");
+  });
+
+  await test("private export contains complete recovery material", async () => {
+    const reveal = document.getElementById("reveal");
+    reveal.checked = true;
+    reveal.dispatchEvent(new Event("change", { bubbles: true }));
+    await until(() => document.getElementById("save"), "private export control");
+    state.lastBlob = null;
+    document.getElementById("save").click();
+    const text = await (await until(() => state.lastBlob, "private export")).text();
+    assert(text.includes("YOUR SEED PHRASE") && text.includes(vectors[0].mnemonic), "Mnemonic is missing");
+    assert(text.includes("BIP39 ENTROPY HEX\n" + vectors[0].entropy), "Entropy is missing");
+    assert(text.includes("MASTER SEED HEX") && text.includes("BIP32 ROOT TPRV"), "Private derivation data is missing");
+
+    const datButton = await until(() => document.getElementById("download-wallet-dat"), "private wallet.dat button");
+    assert(/secrets/i.test(datButton.textContent) && /xprv/i.test(datButton.textContent), "wallet.dat button should warn that secrets are included while revealed");
+    state.lastBlob = null;
+    state.downloadName = "";
+    datButton.click();
+    const dat = await (await until(() => state.lastBlob, "private wallet.dat")).text();
+    assert(state.downloadName === "private-wallet-secrets.dat", "Unexpected private wallet.dat filename");
+    assert(dat.startsWith("SQLite format 3"), "private wallet.dat is not a SQLite database");
+    assert(dat.includes("walletdescriptorkey"), "Private wallet.dat is missing spending key records");
+  });
+
+  await test("versioned HTML export downloads the current self-contained release", async () => {
+    const link = document.querySelector(".download-html");
+    assert(link && link.download === currentFile, "HTML export filename is wrong");
+    const target = new URL(link.href);
+    assert(target.origin === location.origin && target.pathname.endsWith("/" + currentFile), "HTML export target is wrong");
+    // The served bytes are verified by the Node harness instead: the app's
+    // CSP (connect-src 'none') deliberately forbids an in-page fetch.
+  });
+
+  await test("hosted application makes only expected same-origin connections", () => {
+    const resources = performance.getEntriesByType("resource").map((entry) => entry.name);
+    const observed = [...state.network.map((entry) => entry.url), ...resources];
+    const external = observed.filter((url) => {
+      try { return new URL(url, location.href).origin !== location.origin; }
+      catch { return true; }
+    });
+    assert(external.length === 0, "External network activity: " + external.join(", "));
+    // The app fetches nothing at runtime: no version manifest, no API calls.
+    const manifestRequests = observed.filter((url) => /versions\.json$/.test(new URL(url, location.href).pathname));
+    assert(manifestRequests.length === 0, "A version manifest was fetched: " + manifestRequests.join(", "));
+    // The logo and the favicon travel inside the document, so neither is fetched.
+    const imageRequests = observed.filter((url) => /\/assets\/(entropylab_(dark|light)|logo-(dark|light)|favicon)\.png$/.test(new URL(url, location.href).pathname));
+    assert(imageRequests.length === 0, "Hosted mode fetched an inlined image: " + imageRequests.join(", "));
+  });
+
+  report("online-results.txt");
+})();
+</script>

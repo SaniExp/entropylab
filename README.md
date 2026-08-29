@@ -1,0 +1,182 @@
+# EntropyLab
+
+EntropyLab is a self-contained Bitcoin key and wallet calculator designed for
+offline, air-gapped use. It converts user-supplied entropy, seed phrases, and
+private keys into wallet recovery information without intentionally sending
+sensitive data to a server.
+
+Current version: **v0.1.3**
+
+Official website: [entropylab.online](https://entropylab.online)
+
+## Features
+
+- Accepts dice rolls, coin flips, hexadecimal entropy, BIP39 seed phrases,
+  extended keys, WIF keys, raw private keys, and Casascius mini private keys.
+  All five BIP39 phrase lengths (12, 15, 18, 21, and 24 words) are supported
+  for every entropy entry method.
+- Derives BIP39 seeds, BIP32 extended keys, wallet fingerprints, addresses,
+  and Bitcoin Core-compatible descriptors. Each master fingerprint is shown
+  next to its deterministic [LifeHash](https://lifehash.info) icon so two
+  keys can be told apart at a glance.
+- Supports legacy, nested SegWit, native SegWit, and Taproot single-signature
+  address types.
+- Supports Mainnet and Testnet wallet derivation, multisignature construction,
+  and PSBT address rendering. Mainnet is selected by default.
+- Derives watch-only multisignature wallets from extended public keys without
+  requiring private keys.
+- Inspects PSBT v0 transactions, reports PSBT-provided amounts and fees, checks
+  for repeated ECDSA nonces from the same public key, verifies optional Jade
+  anti-exfil (sign-to-contract) transcripts without a key, and can compare supported
+  SegWit v0 SIGHASH_ALL signatures with RFC 6979, including Bitcoin Core-style low-r grinding, in a temporary session.
+  Every input's declared sighash policy and each signature's appended sighash
+  byte are decoded without a key; anything other than exact SIGHASH_ALL is a
+  blocking warning.
+- Runs a quick barrage of startup sanity checks on the host browser (secure
+  context, CSPRNG, BigInt, UTF-8 encoding, and NFKD normalization). If any
+  check fails, the page is replaced with a failure report listing the failed
+  checks, because wallet output from a broken host cannot be trusted.
+- Produces recovery information that can be saved or printed for offline use.
+- Exports a Bitcoin Core `wallet.dat` (SQLite descriptor wallet) with every
+  derived output descriptor already imported — receive and change for each
+  script type, active and ready for address generation. The default download
+  is watch-only; while private recovery material is shown on screen, the
+  export becomes the spending variant (account xprvs as descriptor keys) and
+  the button says so. Generated database files match Bitcoin Core's own
+  record layout byte-for-byte (verified against Bitcoin Core v28.3.0).
+
+## Usage
+
+Download the self-contained `entropylab.html` from the
+[official website](https://entropylab.online) or the
+[releases page](https://github.com/w-s-bitcoin/entropylab/releases), transfer it to a trusted
+computer, disconnect that computer from all networks, and open the file in a
+modern browser. For sensitive wallet material, use a dedicated air-gapped
+machine and verify important addresses and descriptors with an independent
+wallet or signing device before receiving funds.
+
+To build the HTML file yourself, see [Building from source](#building-from-source).
+
+An online version is available at [entropylab.online](https://entropylab.online)
+for convenient access. Do not enter seed phrases, private keys, or other secret
+wallet material into an internet-connected device; use the downloaded HTML on
+a trusted air-gapped computer for sensitive operations.
+
+EntropyLab does not generate wallet entropy. The optional BitBox Heads/Tails
+controls use browser randomness only to choose an equivalent displayed die
+face: 1–3 all mean Heads and 4–6 all mean Tails, so that numeric choice does not
+change the resulting BitBox entropy. Wallet security still depends on the
+quality and secrecy of the entropy, seed phrase, passphrase, or private key
+supplied by the user.
+
+## Building from source
+
+The build imports the cryptographic libraries declared in `package.json`,
+bundles them with the application using esbuild, and inlines the result into a
+single self-contained HTML file. `package-lock.json` pins the complete
+dependency tree and the integrity hash of every downloaded package.
+
+Requirements: Node.js 20.19 or newer.
+
+```sh
+npm ci
+npm run build
+```
+
+Build output (generated; CI rebuilds it for every run and commits it back to
+`rock` after each merge so the file stays downloadable from the repository):
+
+- `entropylab.html` — the self-contained application (open this file)
+
+The version is declared once in `package.json` and substituted into the
+output at build time. The generated file is gitignored locally; CI builds
+it before every test run and commits it back to `rock` after each merge.
+To remove generated files, run `npm run clean`.
+
+## Project structure
+
+```
+├── assets/                 Static assets (logo, favicon, social card)
+├── scripts/
+│   ├── build.mjs           Locked-dependency esbuild and HTML assembly
+│   └── verify-site.mjs     Site artifact verification (npm run verify)
+├── test/
+│   ├── browser-instrumentation.html  In-page browser test hooks
+│   ├── browser-suite.html            In-page browser test suite
+│   ├── browser.test.mjs              Headless-Firefox integration harness
+│   ├── browser-check.test.mjs        Tests for the startup browser sanity checks
+│   ├── network-check.test.mjs        Tests for the network-check module
+│   ├── sqlite-writer.test.mjs        Tests for the SQLite writer (verified with real SQLite)
+│   ├── ui-defaults.test.mjs          UI defaults and markup invariants
+│   ├── validate.test.mjs             Source and security invariants
+│   ├── wallet-export-reference.mjs   Bitcoin Core wallet.dat ground-truth fixture
+│   └── wallet-export.test.mjs        Tests for the wallet.dat export module
+├── src/
+│   ├── index.html          HTML template (markup and document head)
+│   ├── assets/             Header logos, inlined as data URIs at build time
+│   ├── css/styles.css      Application styles
+│   └── js/
+│       ├── app.js          Application logic and explicit package imports
+│       ├── sqlite-writer.js Minimal SQLite database file writer
+│       ├── wallet-export.js Bitcoin Core wallet.dat descriptor export
+│       ├── online.js       Hosted-site behavior and header version label
+│       ├── network-check.js Network adapter detection and warning
+│       ├── browser-check.js Startup browser sanity checks and kill-screen
+│       ├── enhanced-inputs.js
+│       └── repeat-inputs.js
+├── entropylab.html         Compiled application (generated, CI-committed)
+└── versions/archived/      Historical releases excluded from the picker
+```
+
+## Development and deployment
+
+The toolchain is npm and Node.js (>=20.19). Install the exact dependency tree
+with `npm ci`; every local and CI operation is exposed as an npm script:
+
+```bash
+npm test                    # run all tests, including the headless-Firefox suite
+npm run test:ci             # the CI subset: network-check, ui-defaults, source invariants
+npm run test:validate       # validate source and security invariants
+npm run test:browser        # test crypto, sanitization, networking, exports in headless Firefox
+npm run build               # compile src/ into the generated root files
+npm run verify              # verify the site artifact (entropylab.html, assets)
+npm run ci                  # run the CI test subset, build, and verify in order
+```
+
+GitHub Actions builds the site first, then runs the same test steps for pull
+requests and pushes to `rock`, stages the verified site (`entropylab.html`,
+`assets/`) and deploys it to GitHub Pages. After a merge to
+`rock`, a final job commits the rebuilt `entropylab.html`
+back to the repository so the file stays downloadable; pull requests never
+carry the generated output, so they stop conflicting on it. The staging step
+copies the verified `entropylab.html` to a deployment-only `index.html`,
+allowing both the site root and `/entropylab.html` to serve the same
+application without committing a second application artifact. CI runs the
+test suites that need no browser; the headless-Firefox suite runs locally
+where a Firefox binary is available. Local checks and CI/CD use the same
+commands; the workflow contains no separate build implementation.
+
+The browser suite runs the assembled application in headless Firefox against a
+local Node.js HTTP server. It feeds hostile markup and event-handler strings
+through user-facing fields, verifies the application makes no network
+requests at runtime, exercises the hosted warning and
+assets, derives a known wallet through the UI, and inspects both watch-only
+and private recovery-sheet exports. It also runs the BIP39 and BIP32 published
+vectors directly against the application code. It is the only part of the
+toolchain that needs a browser; the server, build, and test harness are
+dependency-free Node.js.
+
+## Security notice
+
+Bitcoin private keys and seed phrases control funds. Review the code, test the
+tool with known vectors, keep secret material offline, and maintain verified
+backups. This software is provided without warranty; use it at your own risk.
+
+## License
+
+EntropyLab is released into the public domain under
+[The Ooga Booga License](LICENSE) — a caveman-speak dedication of the software
+to the public domain, with the same meaning as The Unlicense: free to copy,
+modify, publish, use, compile, sell, or distribute, in source or binary form,
+for any purpose and by any means, with no warranty of any kind. Any and all
+copyright interest in the software is dedicated to the public at large.

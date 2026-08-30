@@ -40,13 +40,15 @@ ${loadSlice("hodlEntropyDigits")}
 ${loadSlice("hodlNumberBaseBits")}
 ${loadSlice("hodlNumberBasePreviewWords")}
 ${loadSlice("hodlBinaryPreviewWords")}
+${loadSlice("hodlNumberBaseCalculationRows")}
 ${loadSlice("hodlBinaryCalculationRows")}
+${loadSlice("hodlNumberBaseBinaryConversionMarkup")}
 ${loadSlice("hodlNumberBaseValueFromBytes")}
 ${loadSlice("hodlBinaryDigits")}
 ${loadSlice("hodlGroupedBinary")}
 ${loadSlice("hodlAnalyzeEntropyInput")}
 ${loadSlice("hodlNumberBaseEntropy")}
-return {hodlEntropyFormats,hodlEntropyFormatConfig,hodlFilterNumberBase,hodlAnalyzeEntropyInput,hodlNumberBaseEntropy,hodlNumberBaseValueFromBytes,hodlBinaryCalculationRows};`,
+return {hodlEntropyFormats,hodlEntropyFormatConfig,hodlFilterNumberBase,hodlAnalyzeEntropyInput,hodlNumberBaseEntropy,hodlNumberBaseValueFromBytes,hodlNumberBaseCalculationRows,hodlBinaryCalculationRows,hodlNumberBaseBinaryConversionMarkup};`,
 )({ encode: (bytes) => Buffer.from(bytes).toString("hex") });
 
 const hexToBits = (hex) => [...hex].map((digit) => Number.parseInt(digit, 16).toString(2).padStart(4, "0")).join("");
@@ -145,6 +147,18 @@ test("binary calculation rows expose BIP39 place values and word numbers", () =>
   assert.equal(rows.length, 1);
   assert.equal(rows[0].index, 1);
   assert.deepEqual(rows[0].terms.map(({ place, bit, value }) => [place, bit, value]), [[1024, "0", 0], [512, "0", 0], [256, "0", 0], [128, "0", 0], [64, "0", 0], [32, "0", 0], [16, "0", 0], [8, "0", 0], [4, "0", 0], [2, "0", 0], [1, "1", 1]]);
+});
+
+test("Base 4 calculation rows use the same normalized 11-bit BIP39 mapping", () => {
+  const rows = api.hodlNumberBaseCalculationRows("333333", "base4", 12);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].index, 2047);
+  assert.deepEqual(rows[0].terms.map(({ place, bit, value }) => [place, bit, value]), [[1024, "1", 1024], [512, "1", 512], [256, "1", 256], [128, "1", 128], [64, "1", 64], [32, "1", 32], [16, "1", 16], [8, "1", 8], [4, "1", 4], [2, "1", 2], [1, "1", 1]]);
+});
+
+test("hex conversion displays each source digit and its binary value", () => {
+  const markup = api.hodlNumberBaseBinaryConversionMarkup("A", api.hodlEntropyFormatConfig("hex", 12));
+  assert.match(markup, />A<\/strong><b>\u2192<\/b><span>1010<\/span>/);
 });
 
 test("Crockford Base32 normalizes its documented aliases", () => {

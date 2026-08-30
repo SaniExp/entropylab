@@ -4926,8 +4926,8 @@ function hodlNumberBasePreviewWords(value, format, targetWords = Pt) {
 function hodlBinaryPreviewWords(value, targetWords = Pt) {
   return hodlNumberBasePreviewWords(value, "bin", targetWords);
 }
-function hodlBinaryCalculationRows(value, targetWords = Pt) {
-  let bits = hodlNumberBaseBits(value, "bin", targetWords), words = hodlBinaryPreviewWords(value, targetWords), groups = bits.match(/.{11}/g) || [];
+function hodlNumberBaseCalculationRows(value, format, targetWords = Pt) {
+  let bits = hodlNumberBaseBits(value, format, targetWords), words = hodlNumberBasePreviewWords(value, format, targetWords), groups = bits.match(/.{11}/g) || [];
   if (words.length > groups.length) {
     let finalIndex = Ae.indexOf(words[groups.length]);
     if (finalIndex >= 0) groups.push(finalIndex.toString(2).padStart(11, "0"));
@@ -4937,16 +4937,30 @@ function hodlBinaryCalculationRows(value, targetWords = Pt) {
     return { number: index + 1, terms, index: Number.parseInt(group, 2), word: words[index] || "" };
   });
 }
-function hodlRenderNumberBaseCalculations(value, targetWords = Pt) {
+function hodlBinaryCalculationRows(value, targetWords = Pt) {
+  return hodlNumberBaseCalculationRows(value, "bin", targetWords);
+}
+function hodlNumberBaseBinaryConversionMarkup(value, meta) {
+  if (meta.id === "bin") return "";
+  let values = [...meta.alphabet].map((character, index) => `<span class="number-base-conversion-cell"><strong>${character}</strong><b>→</b><span>${index.toString(2).padStart(meta.bitsPerDigit, "0")}</span></span>`).join("");
+  return `<div class="number-base-binary-conversion"><p class="label">${meta.shortLabel} digit values</p><p class="muted">Each ${meta.shortLabel} digit uses the binary value shown below before the 11-bit BIP39 calculations.</p><div class="number-base-conversion-list">${values}</div></div>`;
+}
+function hodlRenderNumberBaseCalculations(value, format = "bin", targetWords = Pt) {
   let panel = document.getElementById("number-base-calculations"), toggle = document.getElementById("show-number-base-calculations");
   if (!panel || !toggle) return;
-  let rows = toggle.checked ? hodlBinaryCalculationRows(value, targetWords) : [];
-  panel.hidden = !toggle.checked || !rows.length;
+  let meta = hodlEntropyFormatConfig(format, targetWords), rows = toggle.checked ? hodlNumberBaseCalculationRows(value, meta.id, targetWords) : [], conversion = toggle.checked ? hodlNumberBaseBinaryConversionMarkup(value, meta) : "";
+  panel.hidden = !toggle.checked || !rows.length && !conversion;
   if (!rows.length) {
-    panel.innerHTML = "";
+    panel.innerHTML = conversion;
     return;
   }
-  panel.innerHTML = `<p class="label">Binary calculations</p><p class="muted">Each 11-bit group is interpreted as a big-endian binary integer. Multiply each bit by its bit weight, then sum the contributions to get the zero-based BIP39 index. The corresponding word number is the index plus 1.</p><div class="number-base-calculation-list">${rows.map((row) => `<div class="number-base-calculation" data-calculation-word="${row.number}"><div class="number-base-calculation-title"><span>Word ${row.number}</span><strong>${row.word || "incomplete"}</strong></div><div class="number-base-calculation-row"><span class="number-base-calculation-label">Bit weight</span><div class="number-base-calculation-powers">${row.terms.map((term) => `<span>${term.place}</span>`).join("")}</div></div><div class="number-base-calculation-row"><span class="number-base-calculation-label">Bit</span><div class="number-base-calculation-bits">${row.terms.map((term) => `<span>${term.bit}</span>`).join("")}</div></div><div class="number-base-calculation-row"><span class="number-base-calculation-label">Contribution</span><div class="number-base-calculation-products">${row.terms.map((term) => `<span>${term.value}</span>`).join("")}</div></div><div class="number-base-calculation-sum"><span>${row.terms.map((term) => term.value).join(" + ")} <b>=</b></span><span>BIP39 index <strong>${row.index}</strong></span><span>word number <strong>${row.index + 1}</strong></span></div></div>`).join("")}</div>`;
+  panel.innerHTML = `<p class="label">${meta.label} calculations</p><p class="muted">Each 11-bit group is interpreted as a big-endian binary integer. Multiply each bit by its bit weight, then sum the contributions to get the zero-based BIP39 index. The corresponding word number is the index plus 1.</p><div class="number-base-calculation-list">${rows.map((row) => `<div class="number-base-calculation" data-calculation-word="${row.number}"><div class="number-base-calculation-title"><span>Word ${row.number}</span><strong>${row.word || "incomplete"}</strong></div><div class="number-base-calculation-row"><span class="number-base-calculation-label">Bit weight</span><div class="number-base-calculation-powers">${row.terms.map((term) => `<span>${term.place}</span>`).join("")}</div></div><div class="number-base-calculation-row"><span class="number-base-calculation-label">Bit</span><div class="number-base-calculation-bits">${row.terms.map((term) => `<span>${term.bit}</span>`).join("")}</div></div><div class="number-base-calculation-row"><span class="number-base-calculation-label">Contribution</span><div class="number-base-calculation-products">${row.terms.map((term) => `<span>${term.value}</span>`).join("")}</div></div><div class="number-base-calculation-sum"><span>${row.terms.map((term) => term.value).join(" + ")} <b>=</b></span><span>BIP39 index <strong>${row.index}</strong></span><span>word number <strong>${row.index + 1}</strong></span></div></div>`).join("")}</div>`;
+  let list = panel.querySelector(".number-base-calculation-list");
+  if (list && conversion) {
+    let wrapper = document.createElement("div");
+    wrapper.innerHTML = conversion;
+    panel.insertBefore(wrapper.firstElementChild, list);
+  }
 }
 function hodlHexPreviewWords(value, targetWords = Pt) {
   return hodlNumberBasePreviewWords(value, "hex", targetWords);
@@ -5100,7 +5114,7 @@ function hodlUpdateEntropyInput(input, format, targetWords = Pt, syncContext = "
     meta.className = "muted" + (analysis.ready ? " ok" : analysis.invalidRanges.length ? " err" : "");
   }
   hodlRenderDiceWordGrid(wordsBox, words, config.words, false);
-  hodlRenderNumberBaseCalculations(input.value, config.words);
+  hodlRenderNumberBaseCalculations(input.value, definition.id, config.words);
   let entropyPad = input.closest("#form")?.querySelector(".entropy-keypad");
   if (entropyPad) entropyPad.classList.toggle("coin-phase", coinPhase);
   input.closest("#form")?.querySelectorAll("[data-entropy-digit]").forEach((button) => {
@@ -5421,7 +5435,7 @@ function hodlRenderKeyForm() {
       <div class="choice-grid entropy-format-grid">${formatChoices}</div>
       ${hodlElectrumGenerateMarkup()}
       <div class="number-base-sync-row"><label class="seed-autocomplete-toggle number-base-sync-toggle"><input type="checkbox" id="sync-number-bases" ${syncEnabled ? "checked" : ""} /><span><strong>Sync number bases</strong> <span class="seed-autocomplete-note">(fill every format after complete valid entropy is entered)</span></span></label><span class="number-base-sync-status" id="number-base-sync-status" aria-live="polite" hidden>${hodlCopiedIconMarkup()}<span>Synced</span></span></div>
-      ${format.id === "bin" ? `<label class="seed-autocomplete-toggle number-base-calculations-toggle"><input type="checkbox" id="show-number-base-calculations" ${state?.showNumberBaseCalculations ? "checked" : ""} /><span><strong>Show calculations</strong> <span class="seed-autocomplete-note">(show how each BIP39 word number is calculated)</span></span></label>` : ""}
+      ${["bin", "base4", "base8", "hex"].includes(format.id) ? `<label class="seed-autocomplete-toggle number-base-calculations-toggle"><input type="checkbox" id="show-number-base-calculations" ${state?.showNumberBaseCalculations ? "checked" : ""} /><span><strong>Show calculations</strong> <span class="seed-autocomplete-note">(show how each BIP39 word number is calculated)</span></span></label>` : ""}
       <p class="label" id="entropy-input-label">${format.label} entropy for a ${config.words}-word seed</p>
       <p class="muted" id="entropy-input-help">Each complete ${format.shortLabel} character contributes ${format.bitsPerDigit} bit${format.bitsPerDigit === 1 ? "" : "s"}${format.binaryRemainder ? "" : " except for a mixed-radix final character when needed"}. Seed-word cards fill as enough bits arrive; the checksum-derived final word appears when all ${format.digits} characters are entered.${format.id === "bin" ? " Spaces are added every 11 bits." : ""}${remainderHelp} No generator \u2014 enter entropy you already created.</p>
       ${base64Tools}
@@ -5458,7 +5472,7 @@ function hodlRenderKeyForm() {
     if (calculationsToggle) calculationsToggle.onchange = () => {
       if (state) state.showNumberBaseCalculations = calculationsToggle.checked;
       let input = document.getElementById(inputId);
-      if (input) hodlRenderNumberBaseCalculations(input.value, config.words);
+      if (input) hodlRenderNumberBaseCalculations(input.value, format.id, config.words);
     };
     hodlBindKeyFields();
     hodlBindElectrumGenerateControls();

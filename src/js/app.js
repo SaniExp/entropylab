@@ -960,6 +960,7 @@ ec.innerHTML = `
 `;
 if (/^(www\.)?entropylab\.online$/i.test(location.hostname)) document.getElementById("online-warning")?.removeAttribute("hidden");
 var hodlKeyModes = ["dice", "cards", "hex", "seed", "key"], hodlCardRanks = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K"], hodlDirectCardRanks = ["A", "2", "3", "4", "5", "6", "7", "8"], hodlCardSuits = [{ code: "S", symbol: "\u2660", label: "Spades", red: false }, { code: "H", symbol: "\u2665", label: "Hearts", red: true }, { code: "C", symbol: "\u2663", label: "Clubs", red: false }, { code: "D", symbol: "\u2666", label: "Diamonds", red: true }], hodlCardSuit = "", hodlCardRank = "", hodlCardMethod = "hashed", hodlSeedMethod = "words", hodlSeedZeroIndexed = false, hodlCardColemanSymbols = false, hodlElectrumGenerate = false, hodlElectrumType = "100", Ne = "dice", ge = "coldcard", Pt = 24, hodlEntropyFormat = "hex", hodlDiceCoinPositions = [], ft = "", re = null, Ge = false, hodlWalletDatBirthday = "genesis", Zs = W("#modes"), at = W("#form"), dr = W("#out");
+var hodlManualCalculationsOpen = false;
 hodlKeyModes.forEach((e) => {
   let t = document.createElement("button"), active = e === Ne;
   t.type = "button";
@@ -4002,6 +4003,7 @@ function hodlUpdateDirectCards() {
     reshuffle.innerHTML = instruction ? `<strong>${instruction}</strong>` : "";
   }
   hodlRenderDiceWordGrid(document.getElementById("dice-words"), parsed.words, parsed.config.words, !parsed.complete);
+  hodlRenderManualCalculations("cards-manual-calculations", "cards", input.value, parsed.config.words);
   let status = parsed.complete ? `${parsed.entries.length} of ${parsed.steps.length} rank draws entered \xB7 checksum-valid ${parsed.config.words}-word seed ready to derive` : `${parsed.entries.length} of ${parsed.steps.length} rank draws entered \xB7 ${hodlDirectCardStepStatus(parsed)}`;
   if (parsed.invalidEntries.length) status += ` \xB7 ${parsed.invalidEntries.length} invalid rank${parsed.invalidEntries.length === 1 ? "" : "s"} highlighted`;
   if (parsed.extraEntries.length) status += ` \xB7 ${parsed.extraEntries.length} extra card${parsed.extraEntries.length === 1 ? "" : "s"} highlighted`;
@@ -4945,6 +4947,45 @@ function hodlNumberBaseBinaryConversionMarkup(value, meta) {
   let values = [...meta.alphabet].map((character, index) => `<span class="number-base-conversion-cell"><strong>${character}</strong><b>→</b><span>${index.toString(2).padStart(meta.bitsPerDigit, "0")}</span></span>`).join("");
   return `<div class="number-base-binary-conversion"><p class="label">${meta.shortLabel} digit values</p><p class="muted">Each ${meta.shortLabel} digit uses the binary value shown below before the 11-bit BIP39 calculations.</p><div class="number-base-conversion-list">${values}</div></div>`;
 }
+function hodlManualCalculationMarkup(method, value, targetWords = Pt) {
+  let config = hodlSeedConfig(targetWords), cards = method === "cards" ? hodlParseDirectCards(value, targetWords) : null, dplus = method === "dplus" ? hodlDPlusRolls(value, targetWords) : null, rows = [];
+  if (cards) cards.wordSlots.forEach((word, index) => {
+    let group = cards.values.slice(index * 4, index * 4 + 4);
+    if (group.length === 4 && group.every((entry) => entry !== null)) {
+      let indexValue = (((group[0] * 8) + group[1]) * 8 + group[2]) * 4 + group[3], stages = [{ label: "Draw 1", face: cards.ranks[index * 4], value: group[0], multiplier: 256 }, { label: "Draw 2", face: cards.ranks[index * 4 + 1], value: group[1], multiplier: 32 }, { label: "Draw 3", face: cards.ranks[index * 4 + 2], value: group[2], multiplier: 4 }, { label: "Draw 4", face: cards.ranks[index * 4 + 3], value: group[3], multiplier: 1 }];
+      rows.push({ number: index + 1, values: group, stages, formula: `(((${group[0]} × 8 + ${group[1]}) × 8 + ${group[2]}) × 4 + ${group[3]})`, index: indexValue, word });
+    }
+  });
+  if (dplus) dplus.groups.forEach((group, index) => {
+    if (!group.valid) return;
+    let values = [Number(group.faces[0]) - 1, hodlDPlusD16Value(group.faces[1]), hodlDPlusD16Value(group.faces[2])], stages = [{ label: "D8", face: group.faces[0], value: values[0], multiplier: 256 }, { label: "D16", face: group.faces[1], value: values[1], multiplier: 16 }, { label: "D16", face: group.faces[2], value: values[2], multiplier: 1 }], indexValue = values[0] * 256 + values[1] * 16 + values[2];
+    rows.push({ number: index + 1, values: group.faces, stages, formula: `${values[0]} × 256 + ${values[1]} × 16 + ${values[2]}`, index: indexValue, word: group.word });
+  });
+  if (method === "bitbox") {
+    let faces = [...String(value)].filter((face) => /^[1-6]$/.test(face)), position = 0;
+    for (let number = 1; number <= config.partialWords; number++) {
+      let dice = [];
+      while (dice.length < 5 && position < faces.length) {
+        let face = Number(faces[position++]);
+        if (face <= 4) dice.push(face - 1);
+      }
+      if (dice.length < 5 || position >= faces.length) break;
+      let coinFace = faces[position++], coin = Number(coinFace) <= 3 ? 0 : 1, indexValue = dice.reduce((total, value) => total * 4 + value, 0) * 2 + coin, stages = dice.map((value, index) => ({ label: `Die ${index + 1}`, face: value + 1, value, multiplier: [512, 128, 32, 8, 2][index] }));
+      stages.push({ label: "Coin bit", face: coinFace, value: coin, multiplier: 1 });
+      rows.push({ number, values: [...dice, coin], stages, formula: `(((((${dice[0]} × 4 + ${dice[1]}) × 4 + ${dice[2]}) × 4 + ${dice[3]}) × 4 + ${dice[4]}) × 2 + ${coin}`, index: indexValue, word: Ae[indexValue] });
+    }
+  }
+  if (!rows.length) return "";
+  let title = method === "cards" ? "Direct card calculations" : method === "dplus" ? "D++ calculations" : "BitBox diceware calculations", note = method === "cards" ? "Ranks are mapped to zero-based values (A=0 through 8=7), then combined with radices 8, 8, 8, and 4." : method === "dplus" ? "D8 contributes 8 values and each hexadecimal D16 contributes 16 values, giving 8 × 16 × 16 = 2048 possible indices." : "Each D4 contributes one base-4 value and the final die contributes the coin bit, giving 4⁵ × 2 = 2048 possible indices.";
+  return `<div class="manual-calculation-panel"><p class="label">${title}</p><p class="muted">${note}</p><div class="manual-calculation-list">${rows.map((row) => method === "dplus" || method === "cards" || method === "bitbox" ? `<div class="manual-calculation-row dplus-calculation-row"><div class="manual-calculation-heading"><span>Word ${row.number}</span><strong>${row.word || "incomplete"}</strong></div><div class="dplus-calculation-stages">${row.stages.map((stage) => `<div class="dplus-calculation-stage"><span>${stage.label}</span><strong>${stage.face}</strong><small>&rarr; ${stage.value} &times; ${stage.multiplier}</small><b>= ${stage.value * stage.multiplier}</b></div>`).join("")}</div><div class="dplus-calculation-sum"><span>${row.stages.map((stage) => stage.value * stage.multiplier).join(" + ")}</span><b>= BIP39 index ${row.index} &middot; word number ${row.index + 1}</b></div></div>` : `<div class="manual-calculation-row"><span>Word ${row.number}</span><strong>${row.word || "incomplete"}</strong><code>${row.formula}</code><b>BIP39 index ${row.index} · word number ${row.index + 1}</b></div>`).join("")}</div></div>`;
+}
+function hodlRenderManualCalculations(id, method, value, targetWords = Pt) {
+  let panel = document.getElementById(id);
+  if (!panel) return;
+  let markup = hodlManualCalculationsOpen ? hodlManualCalculationMarkup(method, value, targetWords) : "";
+  panel.hidden = !markup;
+  panel.innerHTML = markup;
+}
 function hodlRenderNumberBaseCalculations(value, format = "bin", targetWords = Pt) {
   let panel = document.getElementById("number-base-calculations"), toggle = document.getElementById("show-number-base-calculations");
   if (!panel || !toggle) return;
@@ -5274,6 +5315,7 @@ function hodlRenderKeyForm() {
       <div class="dice-input-shell"><pre class="dice-input-highlight" id="dice-highlight" aria-hidden="true"></pre><textarea id="dice" placeholder="${dicePlaceholder}" aria-describedby="dice-help dice-meta"></textarea></div>
       ${hodlSeedMetaRowMarkup("dice-meta", true)}
       ${dicePad}
+      ${ge === "bitbox" || ge === "dplus" ? `<label class="seed-autocomplete-toggle manual-calculations-toggle"><input type="checkbox" id="show-manual-calculations" ${hodlManualCalculationsOpen ? "checked" : ""} /><span><strong>Show calculations</strong> <span class="seed-autocomplete-note">(show how direct word selection produces each BIP39 index)</span></span></label><div id="dice-manual-calculations" class="manual-calculations-container" hidden></div>` : ""}
       ${hodlSeedCopyRowMarkup(hodlDiceFairnessToggleMarkup(hodlKeys[hodlActiveKey]?.showDiceFairness))}
       <aside id="dice-fairness" class="dice-fairness" hidden role="status" aria-live="polite"></aside>
       <div id="dice-words" class="dice-word-grid" aria-label="${config.words} seed-word slots"></div><div id="last-words" class="row" style="margin-top:8px"></div>`;
@@ -5281,6 +5323,11 @@ function hodlRenderKeyForm() {
     input.dataset.previousValue = input.value;
     let fairnessToggle = document.getElementById("dice-fairness-toggle");
     if (fairnessToggle) fairnessToggle.onclick = () => hodlSetDiceFairnessOpen(!hodlDiceFairnessIsOpen());
+    let manualToggle = document.getElementById("show-manual-calculations");
+    if (manualToggle) manualToggle.onchange = () => {
+      hodlManualCalculationsOpen = manualToggle.checked;
+      hodlUpdateDice();
+    };
     hodlBindKeypadPointer(at.querySelectorAll("[data-d]"), () => input);
     at.querySelectorAll("[data-d]").forEach((button) => {
       button.onclick = () => hodlInsertDiceControl(input, button);
@@ -5306,6 +5353,7 @@ function hodlRenderKeyForm() {
           }
         }
         ge = radio.value;
+        hodlManualCalculationsOpen = false;
         if (state) {
           state.diceMethod = ge;
           ft = ge === "dplus" ? state.dplusLastWord || "" : ge === "bitbox" ? state.lastWord || "" : "";
@@ -5350,6 +5398,7 @@ function hodlRenderKeyForm() {
       <div class="card-controls-row"><button class="card-undo-button seed-keyboard-delete" id="card-undo" type="button" aria-label="Undo last card" title="Undo last card" disabled><svg viewBox="0 0 24 18" aria-hidden="true" focusable="false"><path d="M9 2h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9L2 9l7-7Z"/><path d="m12 6 6 6m0-6-6 6"/></svg></button><label class="seed-autocomplete-toggle card-visibility-toggle"><input type="checkbox" id="show-cards" aria-controls="dealt-cards" ${showCards ? "checked" : ""} /><span>Show cards</span></label></div>
       <aside class="cards-reshuffle" id="cards-reshuffle" hidden></aside>
       <div class="dealt-cards" id="dealt-cards" aria-live="polite"${showCards ? "" : " hidden"}></div>
+      ${direct ? `<label class="seed-autocomplete-toggle manual-calculations-toggle"><input type="checkbox" id="show-manual-calculations" ${hodlManualCalculationsOpen ? "checked" : ""} /><span><strong>Show calculations</strong> <span class="seed-autocomplete-note">(show how direct card selection produces each BIP39 index)</span></span></label><div id="cards-manual-calculations" class="manual-calculations-container" hidden></div>` : ""}
       ${hodlSeedCopyRowMarkup()}
       <div id="dice-words" class="dice-word-grid" aria-label="${config.words} seed-word slots"></div>
     `;
@@ -5370,6 +5419,7 @@ function hodlRenderKeyForm() {
           state.cardMethod = radio.value;
         }
         hodlCardMethod = radio.value;
+        hodlManualCalculationsOpen = false;
         hodlInvalidateLiveKeyResult();
         hodlRenderKeyForm();
         hodlRestoreFormFields(state);
@@ -5402,6 +5452,11 @@ function hodlRenderKeyForm() {
       let visible = event.currentTarget.checked, state = hodlKeys[hodlActiveKey], dealt = document.getElementById("dealt-cards");
       if (state) state.showCards = visible;
       if (dealt) dealt.hidden = !visible;
+    };
+    let manualToggle = document.getElementById("show-manual-calculations");
+    if (manualToggle) manualToggle.onchange = () => {
+      hodlManualCalculationsOpen = manualToggle.checked;
+      hodlUpdateDirectCards();
     };
     let colemanToggle = document.getElementById("cards-ian-coleman");
     if (colemanToggle) colemanToggle.onchange = () => {
@@ -5737,6 +5792,7 @@ function hodlUpdateDice() {
     if (result.finalWord) displayWords.push(result.finalWord);
     else if (selectedFinal) displayWords.push(selectedFinal);
     hodlRenderDiceWordGrid(wordsBox, displayWords, config.words, false);
+    hodlRenderManualCalculations("dice-manual-calculations", "dplus", input.value, config.words);
     hodlRenderLastWordPicker(picker, selectingFinal ? result.candidates : [], selectedFinal, (word) => {
       ft = word;
       let state = hodlKeys[hodlActiveKey];
@@ -5767,6 +5823,7 @@ function hodlUpdateDice() {
     if (result.waiting === "last-word" && last && !last.error && ft) displayWords.push(ft);
     W("#dice-meta").textContent = status + invalidStatus;
     hodlRenderDiceWordGrid(wordsBox, displayWords, config.words, false);
+    hodlRenderManualCalculations("dice-manual-calculations", "bitbox", input.value, config.words);
     hodlRenderLastWordPicker(picker, last && !last.error ? last.candidates : [], ft, (word) => {
       ft = word;
       let state = hodlKeys[hodlActiveKey];

@@ -166,12 +166,29 @@ test("entropy progress messages sit directly below their inputs and above keypad
   assert.match(app, /<textarea id="key"[^>]*><\/textarea><\/div><p class="muted" id="private-key-meta"[^>]*><\/p>/);
 });
 
-test("seed phrase copy controls sit immediately above every numbered word grid", () => {
-  assert.match(appSource, /\$\{dicePad\}\s*\$\{hodlSeedCopyRowMarkup\(hodlDiceFairnessToggleMarkup\([\s\S]*?\)\)\}\s*<aside id="dice-fairness"[\s\S]*?<\/aside>\s*<div id="dice-words"/);
-  assert.match(appSource, /<div class="dealt-cards"[^>]*><\/div>\s*\$\{hodlSeedCopyRowMarkup\(\)\}\s*<div id="dice-words"/);
+test("seed phrase calculations and copy controls precede every numbered word grid", () => {
+  assert.match(appSource, /\$\{dicePad\}[\s\S]*?manual-calculations-container[\s\S]*?\$\{hodlSeedCopyRowMarkup\(hodlDiceFairnessToggleMarkup\([\s\S]*?\)\)\}[\s\S]*?<div id="dice-words"/);
+  assert.match(appSource, /<div class="dealt-cards"[^>]*><\/div>[\s\S]*?manual-calculations-container[\s\S]*?\$\{hodlSeedCopyRowMarkup\(\)\}\s*<div id="dice-words"/);
   assert.match(appSource, /\$\{entropyPad\}\s*<div id="number-base-calculations"[^>]*><\/div>\s*\$\{hodlSeedCopyRowMarkup\(\)\}\s*<div id="entropy-words"/);
   assert.match(appSource, /<\/div>\$\{hodlSeedCopyRowMarkup\(\)\}<div id="seed-number-words"/);
   assert.match(appSource, /function hodlSeedMetaRowMarkup\(metaId, live = false\) \{\s*return `<div class="seed-word-meta"><p[^`]+<\/p><\/div>`;\s*\}/);
+});
+
+test("direct dice and card methods expose manual BIP39 calculations before copying", () => {
+  assert.match(appSource, /id="show-manual-calculations"/);
+  assert.match(appSource, /id="dice-manual-calculations" class="manual-calculations-container"/);
+  assert.match(appSource, /id="cards-manual-calculations" class="manual-calculations-container"/);
+  assert.match(appSource, /function hodlManualCalculationMarkup\(method, value, targetWords = Pt\)/);
+  assert.match(appSource, /hodlRenderManualCalculations\("dice-manual-calculations",\s*"dplus"/);
+  assert.match(appSource, /hodlRenderManualCalculations\("dice-manual-calculations",\s*"bitbox"/);
+  assert.match(appSource, /hodlRenderManualCalculations\("cards-manual-calculations",\s*"cards"/);
+  assert.match(appSource, /D8 contributes 8 values and each hexadecimal D16 contributes 16 values/);
+  assert.match(appSource, /Each D4 contributes one base-4 value and the final die contributes the coin bit/);
+  assert.match(appSource, /Ranks are mapped to zero-based values/);
+  assert.match(appSource, /dplus-calculation-stages/);
+  assert.match(appSource, /dplus-calculation-stage.*stage\.face/);
+  assert.match(css, /\.manual-calculation-row \{/);
+  assert.match(css, /\.dplus-calculation-stage \{/);
 });
 
 test("Seed phrase offers one-based or zero-based BIP39 word-number entry", () => {

@@ -172,6 +172,27 @@ textarea { display: block; min-height: 96px; letter-spacing: 0.08em; }
 }
 .number-base-sync-status[hidden] { display: none; }
 .number-base-sync-status svg { display: block; width: 16px; height: 16px; }
+.number-base-calculations-toggle { width: 100%; margin-top: var(--space-control); }
+.number-base-calculations-panel { margin-top: var(--space-section); }
+.number-base-calculations-panel[hidden] { display: none; }
+.number-base-calculation-list { display: grid; gap: var(--space-control); }
+.number-base-calculation {
+  overflow-x: auto; padding: 14px 12px 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface-2); font-family: var(--mono); font-size: 12px;
+}
+.number-base-calculation-title { display: flex; justify-content: space-between; gap: 12px; margin: 0 0 12px; color: var(--muted); }
+.number-base-calculation-title span, .number-base-calculation-label { letter-spacing: 0.04em; }
+.number-base-calculation-title strong { color: var(--fg); font-family: var(--mono); font-size: 13px; font-weight: 400; }
+.number-base-calculation-row { display: grid; grid-template-columns: 88px minmax(396px, 1fr); align-items: center; gap: 8px; margin-top: 6px; }
+.number-base-calculation-label { color: var(--muted); font-family: var(--sans); font-size: 11px; font-weight: 600; }
+.number-base-calculation-powers, .number-base-calculation-bits, .number-base-calculation-products { display: grid; grid-template-columns: repeat(11, minmax(32px, 1fr)); gap: 4px; min-width: 396px; text-align: center; }
+.number-base-calculation-powers { color: var(--accent); font-weight: 700; }
+.number-base-calculation-bits span { padding: 8px 4px; border: 1px solid var(--border); border-radius: 6px; color: var(--fg); background: var(--bg); font-size: 14px; font-weight: 700; }
+.number-base-calculation-products { color: var(--fg); font-weight: 600; }
+.number-base-calculation-sum { display: flex; align-items: baseline; justify-content: flex-end; flex-wrap: wrap; gap: 6px 16px; min-width: 484px; margin-top: 12px; padding-top: 9px; border-top: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.number-base-calculation-sum > span { display: inline-flex; align-items: baseline; gap: 5px; }
+.number-base-calculation-sum strong { color: var(--accent); font-size: 13px; font-weight: 700; }
+.number-base-calculation-sum b { color: var(--faint); }
 .passphrase-field { margin-top: var(--space-component); font-size: 14px; font-weight: 600; }
 .passphrase-keyboard-tools { display: flex; align-items: stretch; gap: var(--space-control); margin-top: var(--space-control); }
 .passphrase-keyboard-tools[hidden] { display: none; }

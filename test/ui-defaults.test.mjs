@@ -169,7 +169,7 @@ test("entropy progress messages sit directly below their inputs and above keypad
 test("seed phrase copy controls sit immediately above every numbered word grid", () => {
   assert.match(appSource, /\$\{dicePad\}\s*\$\{hodlSeedCopyRowMarkup\(hodlDiceFairnessToggleMarkup\([\s\S]*?\)\)\}\s*<aside id="dice-fairness"[\s\S]*?<\/aside>\s*<div id="dice-words"/);
   assert.match(appSource, /<div class="dealt-cards"[^>]*><\/div>\s*\$\{hodlSeedCopyRowMarkup\(\)\}\s*<div id="dice-words"/);
-  assert.match(appSource, /\$\{entropyPad\}\s*\$\{hodlSeedCopyRowMarkup\(\)\}\s*<div id="entropy-words"/);
+  assert.match(appSource, /\$\{entropyPad\}\s*<div id="number-base-calculations"[^>]*><\/div>\s*\$\{hodlSeedCopyRowMarkup\(\)\}\s*<div id="entropy-words"/);
   assert.match(appSource, /<\/div>\$\{hodlSeedCopyRowMarkup\(\)\}<div id="seed-number-words"/);
   assert.match(appSource, /function hodlSeedMetaRowMarkup\(metaId, live = false\) \{\s*return `<div class="seed-word-meta"><p[^`]+<\/p><\/div>`;\s*\}/);
 });
@@ -216,11 +216,15 @@ test("Number bases offers exact Base 2, 4, 8, 16, Crockford Base32, and Base64-a
   assert.match(app, /function hodlNumberBasePreviewWords\(value,format,targetWords=Pt\)/);
   assert.match(app, /function hodlNumberBaseValueFromBytes\(bytes,format,targetWords=Pt\)/);
   assert.match(app, /id="sync-number-bases"/);
+  assert.match(app, /id="show-number-base-calculations"/);
+  assert.match(app, /function hodlBinaryCalculationRows\(value,targetWords=Pt\)/);
+  assert.match(app, /id="number-base-calculations" class="number-base-calculations-panel"/);
   assert.match(app, /id="number-base-sync-status"[^>]*hidden>\$\{hodlCopiedIconMarkup\(\)\}<span>Synced<\/span>/);
   assert.match(app, /syncNumberBases:!1/);
   assert.match(app, /entropyFormat:"bin"/);
   assert.ok(app.includes('function hodlNormalizeEntropyFormat(format){return Object.hasOwn(hodlEntropyFormats,String(format??""))?String(format):"bin"}'));
   assert.match(css, /\.number-base-sync-status \{[\s\S]*?color: var\(--ok\)/);
+  assert.match(css, /\.number-base-calculation-list \{/);
   assert.match(app, /fields:\{[^}]*base4:"",base8:"",base32:"",base64:""/);
   assert.match(app, /function hodlBase64KeyboardMarkup\(\)\{return hodlKeyboardMarkup\(!0,"Base64 entropy","base64-keyboard"\)\}/);
   assert.match(app, /function hodlBindBase64Keyboard\(input\)/);

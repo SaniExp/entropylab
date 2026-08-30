@@ -27,7 +27,7 @@ function loadVariable(name, nextName) {
 
 const api = new Function(
   "M",
-  `var Pt=24;
+  `var Pt=24; var Ae=Array.from({length:2048},(_,index)=>String(index));
 ${loadVariable("hodlSeedLengths", "hodlEntropyFormats")}
 ${loadVariable("hodlEntropyFormats", "hodlBip39WordSet")}
 ${loadSlice("hodlSeedConfig")}
@@ -38,12 +38,15 @@ ${loadSlice("hodlFilterNumberBase")}
 ${loadSlice("hodlEntropyDigitEntries")}
 ${loadSlice("hodlEntropyDigits")}
 ${loadSlice("hodlNumberBaseBits")}
+${loadSlice("hodlNumberBasePreviewWords")}
+${loadSlice("hodlBinaryPreviewWords")}
+${loadSlice("hodlBinaryCalculationRows")}
 ${loadSlice("hodlNumberBaseValueFromBytes")}
 ${loadSlice("hodlBinaryDigits")}
 ${loadSlice("hodlGroupedBinary")}
 ${loadSlice("hodlAnalyzeEntropyInput")}
 ${loadSlice("hodlNumberBaseEntropy")}
-return {hodlEntropyFormats,hodlEntropyFormatConfig,hodlFilterNumberBase,hodlAnalyzeEntropyInput,hodlNumberBaseEntropy,hodlNumberBaseValueFromBytes};`,
+return {hodlEntropyFormats,hodlEntropyFormatConfig,hodlFilterNumberBase,hodlAnalyzeEntropyInput,hodlNumberBaseEntropy,hodlNumberBaseValueFromBytes,hodlBinaryCalculationRows};`,
 )({ encode: (bytes) => Buffer.from(bytes).toString("hex") });
 
 const hexToBits = (hex) => [...hex].map((digit) => Number.parseInt(digit, 16).toString(2).padStart(4, "0")).join("");
@@ -135,6 +138,13 @@ test("complete entropy can be synchronized into every number base", () => {
       assert.equal(api.hodlNumberBaseEntropy(value, format, words).hex, hex, `${words} words, ${format}`);
     }
   }
+});
+
+test("binary calculation rows expose BIP39 place values and word numbers", () => {
+  const rows = api.hodlBinaryCalculationRows("00000000001", 12);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].index, 1);
+  assert.deepEqual(rows[0].terms.map(({ place, bit, value }) => [place, bit, value]), [[1024, "0", 0], [512, "0", 0], [256, "0", 0], [128, "0", 0], [64, "0", 0], [32, "0", 0], [16, "0", 0], [8, "0", 0], [4, "0", 0], [2, "0", 0], [1, "1", 1]]);
 });
 
 test("Crockford Base32 normalizes its documented aliases", () => {

@@ -1853,3 +1853,90 @@ input.bad, textarea.bad { border-color: var(--danger) !important; }
   background: color-mix(in oklab, var(--accent) 9%, var(--surface)); color: inherit;
   font: inherit; line-height: 1.2; outline: 0;
 }
+.keymanager-toolbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.keymanager-open { display: inline-flex; align-items: center; gap: 6px; }
+.keymanager-toolbar .control-label { display: inline; }
+.keymanager-mark { flex: 0 0 auto; }
+.keymanager-overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: rgb(0 0 0 / 78%); }
+.keymanager-overlay[hidden] { display: none; }
+.keymanager-card { position: relative; width: min(60vw, 1080px); height: min(78vh, 940px); min-height: 520px; overflow: auto; padding: 28px; border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--border)); border-radius: 18px; background: linear-gradient(145deg, color-mix(in oklab, var(--surface) 94%, var(--accent)), var(--surface)); box-shadow: 0 24px 90px rgb(0 0 0 / 58%); }
+.keymanager-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.keymanager-heading h2 { margin: 0; }
+.keymanager-heading .kicker { margin: 0 0 4px; }
+.icon-button { border: 0; background: transparent; color: var(--muted); font-size: 28px; line-height: 1; cursor: pointer; }
+.keymanager-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin: 0; position: absolute; top: 28px; right: 64px; }
+.keymanager-actions .btn, .keymanager-actions .keymanager-file-label { display: inline-flex; min-width: 72px; min-height: 30px; align-items: center; justify-content: center; gap: 4px; padding: 5px 9px; font-size: .8rem; line-height: 1; white-space: nowrap; }
+.keymanager-action-icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.keymanager-file-label { cursor: pointer; }
+.keymanager-password { display: none; }
+.keymanager-status { min-height: 20px; }
+.keymanager-status[data-state="error"] { color: var(--danger-bright); }
+.keymanager-file-location { margin: 14px 0 0; color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+.keymanager-list { display: grid; gap: 8px; margin-top: 12px; }
+.keymanager-key-tabs { display: flex; flex-wrap: nowrap; gap: 6px; min-width: 0; overflow-x: auto; overflow-y: hidden; padding: 2px 2px 8px; scrollbar-width: thin; }
+.keymanager-key-tab-wrap { position: relative; display: block; flex: 0 1 auto; min-width: 0; }
+.keymanager-key-tab-toggle { position: absolute; z-index: 1; top: 3px; right: 3px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 5px; background: color-mix(in oklab, var(--surface-2) 85%, transparent); color: var(--muted); font: 700 14px/18px var(--mono); cursor: pointer; }
+.keymanager-key-tab-toggle:hover { background: color-mix(in oklab, var(--accent) 16%, transparent); color: var(--fg); }
+.keymanager-key-tab { display: inline-flex; flex: 0 1 auto; min-width: 0; max-width: 180px; height: 38px; align-items: center; gap: 6px; overflow: hidden; padding: 5px 30px 5px 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-2); color: var(--muted); font: inherit; font-size: .82rem; cursor: pointer; white-space: nowrap; }
+.keymanager-key-tab:hover, .keymanager-key-tab.active { border-color: var(--accent); color: var(--fg); background: color-mix(in oklab, var(--accent) 12%, var(--surface-2)); }
+.keymanager-key-tab span { overflow: hidden; text-overflow: ellipsis; }
+.keymanager-key-tab-image { display: block; flex: 0 0 24px; width: 24px; height: 24px; border-radius: 5px; image-rendering: pixelated; background: var(--surface); }
+.keymanager-entry-panel { min-height: 0; }
+.keymanager-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.keymanager-panel-heading h3 { margin: 0; }
+.keymanager-entry { display: block; padding: 14px; border: 1px solid color-mix(in oklab, var(--border) 75%, var(--accent)); border-radius: 12px; background: color-mix(in oklab, var(--surface-2) 92%, var(--accent)); transition: border-color .15s ease, transform .15s ease; }
+.keymanager-entry:hover { border-color: var(--accent); transform: translateY(-1px); }
+.keymanager-entry summary { cursor: pointer; }
+.keymanager-entry-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; list-style: none; }
+.keymanager-entry-summary::-webkit-details-marker { display: none; }
+.keymanager-entry-copy { display: grid; gap: 3px; min-width: 0; }
+.keymanager-entry-title { font-weight: 650; }
+.keymanager-entry-meta { overflow: hidden; color: var(--muted); font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }
+.keymanager-entry-fingerprint, .keymanager-entry-meta > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.keymanager-entry-fingerprint { color: var(--fg); font-family: var(--mono); font-size: .8rem; }
+.keymanager-entry-badge { color: var(--muted); font-size: .8rem; }
+.keymanager-entry-body { display: grid; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.keymanager-name-field { display: grid; gap: 6px; }
+.keymanager-name-field { margin-bottom: 6px; }
+.keymanager-name-field input { margin-top: 0; }
+.keymanager-inline-name { position: relative; display: flex; flex: 0 0 314px; min-width: 150px; max-width: 314px; }
+.keymanager-panel-heading .keymanager-inline-name { margin-left: -9px; margin-right: 9px; }
+.keymanager-inline-name input { width: 100%; height: 36px; margin: 0 0 6px; padding: 6px 10px; }
+.keymanager-inline-name .keymanager-name-toggle { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; }
+.keymanager-name-row { display: flex; align-items: flex-end; gap: 8px; }
+.keymanager-name-row .keymanager-name-field { flex: 1 1 auto; margin-bottom: 0; }
+.keymanager-name-toggle { flex: 0 0 36px; width: 36px; height: 36px; margin-bottom: 0; padding: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-2); color: var(--fg); font: 700 20px/1 var(--mono); cursor: pointer; }
+.keymanager-name-toggle:hover { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 12%, var(--surface-2)); }
+.keymanager-details { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(0, 1.3fr); gap: 6px 12px; margin: 0; }
+.keymanager-details dt { color: var(--muted); }
+.keymanager-fingerprint-icon { width: 15px; height: 15px; margin-right: 5px; vertical-align: -2px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.keymanager-details dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); font-size: .86rem; }
+.keymanager-entry-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.keymanager-entry-actions .btn { min-width: 72px; min-height: 30px; align-items: center; justify-content: center; padding: 5px 9px; font-size: .8rem; line-height: 1; }
+.keymanager-unsaved { border-color: color-mix(in oklab, var(--warn) 60%, var(--border)); }
+.keymanager-ignored-section { display: grid; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.keymanager-ignored-section h3 { margin: 0; font-size: 1rem; }
+.keymanager-ignored-tabs { display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto; padding: 2px 2px 6px; }
+.keymanager-ignored-item { flex: 0 0 auto; }
+.keymanager-ignored-restore { position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 5px; background: color-mix(in oklab, var(--surface-2) 85%, transparent); color: var(--muted); font: 700 12px/18px var(--mono); cursor: pointer; }
+.keymanager-ignored-restore:hover { background: color-mix(in oklab, var(--accent) 16%, transparent); color: var(--fg); }
+.keymanager-ignored-card { position: relative; display: inline-flex; max-width: 150px; height: 38px; align-items: center; gap: 6px; overflow: hidden; padding: 5px 30px 5px 9px; border: 1px dashed var(--border); border-radius: 9px; color: var(--muted); font-size: .8rem; white-space: nowrap; }
+.keymanager-ignored-card > span { overflow: hidden; text-overflow: ellipsis; }
+.keymanager-ignored-info { display: grid; min-width: 0; gap: 1px; overflow: hidden; }
+.keymanager-ignored-info > span, .keymanager-ignored-info > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.keymanager-ignored-info small { color: var(--muted); font-family: var(--mono); font-size: .68rem; }
+.keymanager-password-overlay { z-index: 21; }
+.keymanager-password-card { width: min(460px, 100%); padding: 24px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 20px 70px rgb(0 0 0 / 50%); }
+.keymanager-password-prompt { display: grid; gap: 6px; margin-top: 18px; }
+.keymanager-password-prompt input { margin-top: 0; }
+.keymanager-password-rules { display: block; margin-top: 6px; }
+.keymanager-password-error { min-height: 20px; margin: 10px 0 0; color: var(--danger-bright); }
+.keymanager-password-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+@media (max-width: 640px) {
+  .keymanager-card { width: calc(100vw - 24px); height: min(80vh, 680px); min-height: 0; padding: 20px; }
+  .keymanager-actions { position: static; justify-content: flex-start; margin: 16px 0; }
+  .keymanager-key-tab { max-width: 130px; height: 34px; padding: 4px 26px 4px 7px; font-size: .76rem; }
+  .keymanager-key-tab-image { flex-basis: 20px; width: 20px; height: 20px; }
+  .keymanager-inline-name { flex: 1 1 180px; max-width: 300px; }
+  .keymanager-panel-heading .keymanager-inline-name { margin-left: 0; margin-right: 0; }
+}

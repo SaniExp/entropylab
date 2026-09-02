@@ -34,6 +34,7 @@ import { initPsbtEditor } from "./psbt-editor.js";
 import { renderSVG as hodlUqrRenderSvg } from "uqr";
 import { BIP39_LANGUAGE_ENGLISH, BIP85_APPS, bip85Path, deriveApplication, parseChildIndex, wipeBip85Result, wipeBytes as hodlWipeBytes } from "./bip85.js";
 import { t as hodlT, hodlInitLocale, hodlFillLocaleSelect, hodlGetLocale } from "./i18n.js";
+import { decryptKeyVault, encryptKeyVault, keyVaultIdentity } from "./keymanager.js";
 const hodlBip39Wordlist = Object.freeze(bip39English);
 function hodlNote(key, vars) {
   return vars == null ? { key } : { key, vars };
@@ -457,6 +458,7 @@ hodlRootEl.innerHTML = `
       <span class="site-title">EntropyLab</span>
       <span class="network-status" id="network-status" data-state="online" role="status" aria-label="Network status: online" data-i18n="network.online" data-i18n-aria="network.onlineAria">Online</span>
       <div class="download-controls">
+        <button class="btn secondary header-button keymanager-open" id="keymanager-open" type="button" aria-haspopup="dialog" aria-controls="keymanager-dialog" aria-label="Open KeyManager"><svg class="keymanager-mark" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="15" r="4"/><path d="m11 12 8-8m-3 0h3v3m-6 2 2 2"/></svg><span class="control-label">KeyManager</span></button>
         <a class="btn secondary download-html header-button" href="entropylab.html" download="entropylab.html" aria-label="Download EntropyLab" data-i18n-aria="header.downloadAria"><svg class="download-mark" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg><span class="control-label" data-i18n="header.download">Download</span></a>
         <div class="network-picker" id="network-picker" data-network="mainnet">
           <button type="button" class="network-picker-button header-button" id="network-picker-button" aria-haspopup="menu" aria-expanded="false" aria-controls="network-picker-menu" aria-label="Bitcoin network: Bitcoin. Change the network the tools derive and check for" data-i18n-aria="networkPicker.buttonAria" data-i18n-vars='{"network":"Bitcoin"}'><svg class="network-picker-glyph" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle class="network-picker-coin" cx="12" cy="12" r="12"/><path class="network-picker-b" fill-rule="evenodd" d="M17.288 10.291c.24-1.59-.974-2.45-2.64-3.03l.54-2.153-1.315-.33-.525 2.107c-.345-.087-.705-.167-1.064-.25l.526-2.127-1.32-.33-.54 2.165c-.285-.067-.565-.132-.84-.2l-1.815-.45-.35 1.407s.975.225.955.236c.535.136.63.486.615.766l-1.477 5.92c-.075.166-.24.406-.614.314.015.02-.96-.24-.96-.24l-.66 1.51 1.71.426.93.242-.54 2.19 1.32.327.54-2.17c.36.1.705.19 1.05.273l-.51 2.154 1.32.33.545-2.19c2.24.427 3.93.257 4.64-1.774.57-1.637-.03-2.58-1.217-3.196.854-.193 1.5-.76 1.68-1.93h.01zM14.278 14.511c-.404 1.64-3.157.75-4.05.53l.72-2.9c.896.23 3.757.67 3.33 2.37zM14.688 10.271c-.37 1.49-2.662.735-3.405.55l.654-2.64c.744.18 3.137.524 2.75 2.084v.006z"/></svg><span class="network-picker-label control-label" id="network-picker-label" data-i18n="networkPicker.name.mainnet">Bitcoin</span><svg class="network-picker-chevron" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg></button>
@@ -505,7 +507,7 @@ hodlRootEl.innerHTML = `
         <p class="muted calc-intro">Turn entropy you bring \u2014 dice rolls, playing cards, a number in any base, a seed phrase, or a private key \u2014 into a BIP-39 seed, then derive its master fingerprint, extended public keys, and receive addresses. The dice methods match COLDCARD, SeedSigner, Keystone, and BitBox, so the same rolls reproduce the same seed on those signers. This does not invent entropy \u2014 it is a calculator, and nothing leaves this page.</p>
       </div>
       <section class="key-manager no-print" id="key-manager">
-      <div class="key-tab-strip"><div class="key-tabs" id="key-tabs" role="tablist" aria-label="Keys"></div><div class="add-item-control"><button class="add-key" id="add-key" type="button" aria-label="Open Key Station to derive another key" aria-describedby="add-key-tooltip">+</button><span class="add-item-tooltip" id="add-key-tooltip" role="tooltip">Open Key Station to derive another key</span></div><div class="add-item-control"><button class="add-key remove-key" id="delete-key" type="button" aria-label="Delete current key" aria-describedby="delete-key-tooltip" disabled>−</button><span class="add-item-tooltip" id="delete-key-tooltip" role="tooltip">Delete this key</span></div></div>
+      <div class="keymanager-toolbar"><button class="btn secondary keymanager-open" id="keymanager-open" type="button" aria-haspopup="dialog" aria-controls="keymanager-dialog" aria-label="Open KeyManager"><svg class="keymanager-mark" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="15" r="4"/><path d="m11 12 8-8m-3 0h3v3m-6 2 2 2"/></svg><span class="control-label">KeyManager</span></button></div><div class="key-tab-strip"><div class="key-tabs" id="key-tabs" role="tablist" aria-label="Keys"></div><div class="add-item-control"><button class="add-key" id="add-key" type="button" aria-label="Open Key Station to derive another key" aria-describedby="add-key-tooltip">+</button><span class="add-item-tooltip" id="add-key-tooltip" role="tooltip">Open Key Station to derive another key</span></div><div class="add-item-control"><button class="add-key remove-key" id="delete-key" type="button" aria-label="Delete current key" aria-describedby="delete-key-tooltip" disabled>−</button><span class="add-item-tooltip" id="delete-key-tooltip" role="tooltip">Delete this key</span></div></div>
     </section>
     <section class="card no-print" id="calc-card" role="tabpanel" hidden>
       <div class="key-mode-select" id="modes"><p class="label" id="key-method-label" data-i18n="keys.methodLabel">Method</p></div>
@@ -9890,6 +9892,7 @@ var hodlAccountId = "bip84",
   hodlNextKeyNumber = 1,
   hodlKeys = [],
   hodlActiveKey = -1;
+var hodlVaultKey = null, hodlVaultIds = new Set(), hodlVaultIgnored = [], hodlVaultPending = [], hodlVaultName = "entropylab-keys.elkeys", hodlVaultFileHandle = null, hodlVaultImportedFileName = "", hodlVaultSavedFileName = "", hodlVaultSavedMode = "", hodlVaultActiveId = "", hodlVaultDirty = false;
 
 function hodlKeyColor(id) {
   let hue = Math.round((Number(id) * 137.508 + 19) % 360);
@@ -9911,12 +9914,330 @@ function hodlPrivateKeyValues(fields) {
 }
 function hodlNewKeyState(name, keyId, keyNumber) {
   let id = keyId ?? hodlNextKeyId++, number = keyNumber ?? hodlNextKeyNumber++;
-  return { id, number, color: hodlKeyColor(id), name: name || hodlDefaultKeyName(number), mode: "dice", diceMethod: "coldcard", cardMethod: "hashed", seedMethod: "words", seedZeroIndexed: false, cardColemanSymbols: false, entropyFormat: "bin", globalSync: false, globalSyncSource: "", globalSyncBitCount: 0, seedAutocomplete: true, passphraseBip39Words: false, brainWalletOutput: "scalar", passphraseAutocomplete: true, brainWalletTrim: false, showCards: false, showDiceFairness: false, targetWords: 24, diceCoinPositions: [], lastWord: "", dplusLastWord: "", result: null, reveal: false, accountId: "bip84", error: "", fields: { pass: "", script: "bip84", derivationPath: `m/84'/${hodlDefaultCoinType()}'/0'/0/0`, derivationAccountPath: `m/84'/${hodlDefaultCoinType()}'/0'`, purpose: "84'", purposeHarden: true, coinType: `${hodlDefaultCoinType()}'`, coinTypeHarden: true, network: hodlNetworkDefault, account: "0'", accountHarden: true, branchStart: "0", branchHarden: false, branchRange: "1", addressStart: "0", addressHarden: false, addressRange: "1", dice: "", bitboxDice: "", dplusDice: "", hex: "", bin: "", base4: "", base8: "", base32: "", base64: "", cards: "", directCards: "", seed: "", seedNumbers: "", brainLab: "", key: "", keyKind: "wif", privateKeys: { wif: "", "hex-key": "", minikey: "", brain: "" } } };
+  return { id, number, createdAt: new Date().toISOString(), color: hodlKeyColor(id), name: name || hodlDefaultKeyName(number), mode: "dice", diceMethod: "coldcard", cardMethod: "hashed", seedMethod: "words", seedZeroIndexed: false, cardColemanSymbols: false, entropyFormat: "bin", globalSync: false, globalSyncSource: "", globalSyncBitCount: 0, seedAutocomplete: true, passphraseBip39Words: false, brainWalletOutput: "scalar", passphraseAutocomplete: true, brainWalletTrim: false, showCards: false, showDiceFairness: false, targetWords: 24, diceCoinPositions: [], lastWord: "", dplusLastWord: "", result: null, reveal: false, accountId: "bip84", error: "", fields: { pass: "", script: "bip84", derivationPath: `m/84'/${hodlDefaultCoinType()}'/0'/0/0`, derivationAccountPath: `m/84'/${hodlDefaultCoinType()}'/0'`, purpose: "84'", purposeHarden: true, coinType: `${hodlDefaultCoinType()}'`, coinTypeHarden: true, network: hodlNetworkDefault, account: "0'", accountHarden: true, branchStart: "0", branchHarden: false, branchRange: "1", addressStart: "0", addressHarden: false, addressRange: "1", dice: "", bitboxDice: "", dplusDice: "", hex: "", bin: "", base4: "", base8: "", base32: "", base64: "", cards: "", directCards: "", seed: "", seedNumbers: "", brainLab: "", key: "", keyKind: "wif", privateKeys: { wif: "", "hex-key": "", minikey: "", brain: "" } } };
 }
 function hodlNewLabState() {
   let state = hodlNewKeyState("Key Station", 0, 0);
   state.isLab = true;
   return state;
+}
+function hodlVaultEntry(state) {
+  let copy = JSON.parse(JSON.stringify(state));
+  delete copy.isLab;
+  copy.reveal = false;
+  copy.error = "";
+  copy.errorSpec = null;
+  return copy;
+}
+function hodlVaultStatus(message, error = false) {
+  let status = document.getElementById("keymanager-status");
+  if (!status) return;
+  status.textContent = message || "";
+  status.dataset.state = error ? "error" : "";
+}
+function hodlVaultSavedStates() {
+  return hodlVaultStates().filter((state) => hodlVaultIds.has(keyVaultIdentity(state)));
+}
+function hodlVaultStates() {
+  let states = [], identities = new Set();
+  [...hodlKeys.filter((state) => !state.isLab), ...hodlVaultPending].forEach((state) => { let identity = keyVaultIdentity(state); if (!identity || identities.has(identity)) return; identities.add(identity); states.push(state); });
+  return states;
+}
+function hodlVaultRenderSummary() {
+  let list = document.getElementById("keymanager-list");
+  if (!list) return;
+  let entries = hodlVaultStates();
+  list.replaceChildren();
+  if (!entries.length) {
+    let empty = document.createElement("p"); empty.className = "muted"; empty.textContent = "No derived keys are loaded in Key Station."; list.appendChild(empty); return;
+  }
+  entries.forEach((state) => {
+    let saved = hodlVaultIds.has(keyVaultIdentity(state)), row = document.createElement("div"), copy = document.createElement("div"), title = document.createElement("div"), meta = document.createElement("div");
+    row.className = "keymanager-entry" + (saved ? "" : " keymanager-unsaved");
+    title.className = "keymanager-entry-title"; title.textContent = state.name || state.result?.masterFingerprint || "Unnamed key";
+    meta.className = "keymanager-entry-meta"; meta.textContent = `${state.result?.masterFingerprint || "No fingerprint"} · ${hodlKeySummaryMethod(state)} · ${saved ? "Saved in key file" : "Key Station only"}`;
+    copy.append(title, meta); row.appendChild(copy);
+    if (!saved) { let add = document.createElement("button"); add.className = "btn secondary"; add.type = "button"; add.textContent = "Add"; add.onclick = () => hodlVaultAddState(state); row.appendChild(add); }
+    list.appendChild(row);
+  });
+}
+function hodlVaultFingerprintDetails(state) {
+  let result = state?.result || {}, base = "", passphrase = "";
+  if (result.mnemonic) {
+    try { base = hodlMasterFingerprint(result.mnemonic); } catch {}
+    if (state.fields?.pass) try { passphrase = hodlMasterFingerprint(result.mnemonic, state.fields.pass); } catch {}
+  }
+  return { base, passphrase };
+}
+function hodlVaultRenameState(state, input) {
+  let name = String(input.value || "").trim().replace(/\s+/g, " ");
+  if (!name) { input.value = state.name || ""; return; }
+  if (hodlKeyNameTaken(name, hodlKeys.indexOf(state))) { input.value = state.name || ""; hodlVaultStatus("That key name is already in use.", true); return; }
+  state.name = name; input.value = name; hodlVaultDirty = true; hodlRenderKeyTabs(); hodlVaultRender(); hodlVaultUpdateLocation();
+  hodlVaultStatus("Key name updated in memory. Export the key file to save the update.");
+}
+function hodlVaultRenderLegacy() {
+  let list = document.getElementById("keymanager-list");
+  if (!list) return;
+  let entries = hodlKeys.filter((state) => !state.isLab);
+  list.replaceChildren();
+  if (!entries.length) { let empty = document.createElement("p"); empty.className = "muted"; empty.textContent = "No derived keys are loaded in Key Station."; list.appendChild(empty); hodlVaultRenderIgnored(list); return; }
+  entries.forEach((state) => {
+    let saved = hodlVaultIds.has(keyVaultIdentity(state)), result = state.result || {}, fingerprints = hodlVaultFingerprintDetails(state), row = document.createElement("details"), summary = document.createElement("summary"), copy = document.createElement("span"), title = document.createElement("span"), meta = document.createElement("span"), badge = document.createElement("span"), body = document.createElement("div"), name = document.createElement("input");
+    row.className = "keymanager-entry" + (saved ? "" : " keymanager-unsaved");
+    summary.className = "keymanager-entry-summary";
+    copy.className = "keymanager-entry-copy";
+    title.className = "keymanager-entry-title"; title.textContent = state.name || result.masterFingerprint || "Unnamed key";
+    meta.className = "keymanager-entry-meta";
+    let fingerprint = document.createElement("span"), basic = document.createElement("span");
+    fingerprint.className = "keymanager-entry-fingerprint"; fingerprint.innerHTML = '<svg class="keymanager-fingerprint-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a7 7 0 0 0-7 7v2m14 0v-2a7 7 0 0 0-7-7m-4 7v2a4 4 0 0 0 8 0v-2m-4-3v6m-8 0v-3m16 0v3M8 21a8 8 0 0 0 8 0"/></svg>' + (result.masterFingerprint || fingerprints.base || "No fingerprint");
+    basic.textContent = `${hodlKeySummaryMethod(state) || "Unknown method"} · ${result.network || state.fields?.network || "Unknown network"} · ${state.fields?.derivationPath || state.createdPath || "Path unavailable"}`;
+    meta.append(fingerprint, basic); copy.append(title, meta);
+    badge.className = "keymanager-entry-badge"; badge.textContent = saved ? "Saved" : "Not saved";
+    summary.append(copy, badge); row.appendChild(summary);
+    body.className = "keymanager-entry-body";
+    let label = document.createElement("label"); label.className = "field keymanager-name-field"; label.textContent = "Key name"; name.type = "text"; name.value = state.name || ""; name.maxLength = 120; name.autocomplete = "off"; name.onchange = () => hodlVaultRenameState(state, name); label.appendChild(name); body.appendChild(label);
+    let details = [
+      ["Base-seed fingerprint", fingerprints.base || result.masterFingerprint || "Not available"],
+      ["BIP39 passphrase fingerprint", fingerprints.passphrase || "None or not available"],
+      ["Method", hodlKeySummaryMethod(state) || "Unknown"],
+      ["Network", result.network || state.fields?.network || "Unknown"],
+      ["Derivation path", state.fields?.derivationPath || state.createdPath || "Not available"],
+      ["Account path", state.fields?.derivationAccountPath || "Not available"],
+      ["Public root key", result.rootXpub || result.xpub || result.importedPublicKey || "Not available"],
+      ["Private material", (result.rootXprv || result.importedPrivateKey || result.accounts?.some((account) => account.primaryPrivate)) ? "Present" : "Not present"]
+    ];
+    let table = document.createElement("dl"); table.className = "keymanager-details";
+    details.forEach(([key, value]) => { let dt = document.createElement("dt"), dd = document.createElement("dd"); if (key.includes("fingerprint")) dt.innerHTML = '<svg class="keymanager-fingerprint-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a7 7 0 0 0-7 7v2m14 0v-2a7 7 0 0 0-7-7m-4 7v2a4 4 0 0 0 8 0v-2m-4-3v6m-8 0v-3m16 0v3M8 21a8 8 0 0 0 8 0"/></svg>' + key; else dt.textContent = key; dd.textContent = value; table.append(dt, dd); });
+    body.appendChild(table);
+    let actions = document.createElement("div"); actions.className = "keymanager-entry-actions";
+    if (!saved) { let add = document.createElement("button"); add.className = "btn secondary"; add.type = "button"; add.textContent = "Add to key file"; add.onclick = (event) => { event.preventDefault(); hodlVaultAddState(state); }; actions.appendChild(add); }
+    let use = document.createElement("button"); use.className = "btn secondary"; use.type = "button"; use.textContent = "Use in Key Station"; use.onclick = (event) => { event.preventDefault(); hodlVaultUseInStation(state); }; actions.appendChild(use);
+    body.appendChild(actions); row.appendChild(body); list.appendChild(row);
+  });
+}
+function hodlVaultRender() {
+  let list = document.getElementById("keymanager-list");
+  if (!list) return;
+  let entries = hodlVaultStates();
+  list.replaceChildren();
+  if (!entries.length) { let empty = document.createElement("p"); empty.className = "muted"; empty.textContent = "No derived keys are loaded in Key Station."; list.appendChild(empty); hodlVaultRenderIgnored(list); return; }
+  entries.forEach((state) => { if (!state.createdAt) state.createdAt = new Date().toISOString(); });
+  let active = entries.find((state) => keyVaultIdentity(state) === hodlVaultActiveId) || entries[0];
+  hodlVaultActiveId = keyVaultIdentity(active);
+  let tabs = document.createElement("div"); tabs.className = "keymanager-key-tabs"; tabs.setAttribute("role", "tablist"); tabs.setAttribute("aria-label", "Key files");
+  entries.forEach((state) => {
+    let identity = keyVaultIdentity(state), fingerprint = state.result?.masterFingerprint || "", saved = hodlVaultIds.has(identity), wrap = document.createElement("div"), toggle = document.createElement("button"), tab = document.createElement("button"), image = document.createElement("img"), label = document.createElement("span");
+    wrap.className = "keymanager-key-tab-wrap";
+    toggle.className = "keymanager-key-tab-toggle"; toggle.type = "button"; toggle.textContent = saved ? "\u2212" : "+"; toggle.title = saved ? "Remove this key from the file" : "Add this key to the file"; toggle.setAttribute("aria-label", toggle.title); toggle.onclick = (event) => { event.stopPropagation(); hodlVaultToggleState(state); };
+    tab.className = "keymanager-key-tab" + (identity === hodlVaultActiveId ? " active" : ""); tab.type = "button"; tab.setAttribute("role", "tab"); tab.setAttribute("aria-selected", String(identity === hodlVaultActiveId)); tab.title = fingerprint || state.name || "Key";
+    image.className = "keymanager-key-tab-image"; image.width = 24; image.height = 24; image.alt = ""; image.hidden = true; hodlFillKeyTabLifehash(image, fingerprint);
+    label.textContent = state.name || fingerprint || "Unnamed key"; tab.append(image, label);
+    tab.onclick = () => { hodlVaultActiveId = identity; hodlVaultRender(); };
+    wrap.append(tab, toggle); tabs.appendChild(wrap);
+  });
+  list.appendChild(tabs);
+  let state = active, saved = hodlVaultIds.has(keyVaultIdentity(state)), result = state.result || {}, fingerprints = hodlVaultFingerprintDetails(state), body = document.createElement("section");
+  body.className = "keymanager-entry keymanager-entry-panel" + (saved ? "" : " keymanager-unsaved"); body.setAttribute("role", "tabpanel");
+  let heading = document.createElement("div"); heading.className = "keymanager-panel-heading";
+  let title = document.createElement("h3"); title.className = "keymanager-entry-title"; title.textContent = state.name || result.masterFingerprint || "Unnamed key";
+  let name = document.createElement("input"); name.type = "text"; name.value = state.name || ""; name.maxLength = 120; name.autocomplete = "off"; name.setAttribute("aria-label", "Key name"); name.onchange = () => hodlVaultRenameState(state, name);
+  let nameWrap = document.createElement("span"); nameWrap.className = "keymanager-inline-name"; nameWrap.appendChild(name);
+  let badge = document.createElement("span"); badge.className = "keymanager-entry-badge"; badge.textContent = saved ? "Saved" : "Not saved"; heading.append(title, nameWrap, badge); body.appendChild(heading);
+  let details = [["Created", state.createdAt ? new Date(state.createdAt).toLocaleString() : "Not available"], ["Base-seed fingerprint", fingerprints.base || result.masterFingerprint || "Not available"], ["BIP39 passphrase fingerprint", fingerprints.passphrase || "None or not available"], ["Method", hodlKeySummaryMethod(state) || "Unknown"], ["Network", result.network || state.fields?.network || "Unknown"], ["Derivation path", state.fields?.derivationPath || state.createdPath || "Not available"], ["Public root key", result.rootXpub || result.xpub || result.importedPublicKey || "Not available"]];
+  let table = document.createElement("dl"); table.className = "keymanager-details";
+  details.forEach(([key, value]) => { let dt = document.createElement("dt"), dd = document.createElement("dd"); dt.textContent = key; dd.textContent = value; table.append(dt, dd); });
+  body.appendChild(table);
+  let actions = document.createElement("div"); actions.className = "keymanager-entry-actions";
+  if (!saved) { let add = document.createElement("button"); add.className = "btn secondary"; add.type = "button"; add.textContent = "Add to key file"; add.onclick = () => hodlVaultAddState(state); actions.appendChild(add); }
+  let use = document.createElement("button"); use.className = "btn secondary keymanager-use-button"; use.type = "button"; use.textContent = "Use in Key Station"; use.onclick = () => hodlVaultUseInStation(state); actions.appendChild(use);
+  let ignore = document.createElement("button"); ignore.className = "btn secondary"; ignore.type = "button"; ignore.textContent = "Ignore forever"; ignore.onclick = () => hodlVaultIgnoreState(state); actions.appendChild(ignore);
+  body.appendChild(actions); list.appendChild(body); hodlVaultRenderIgnored(list);
+}
+function hodlVaultDownload(text, filename = hodlVaultName) {
+  let blob = new Blob([text], { type: "application/json" }), url = URL.createObjectURL(blob), link = document.createElement("a");
+  link.href = url; link.download = filename; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+function hodlVaultDateFilename() {
+  let now = new Date(), pad = (value) => String(value).padStart(2, "0");
+  return `entropylab_keys_${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.elkeys`;
+}
+async function hodlVaultSaveExport(text, filename) {
+  if (typeof window.showSaveFilePicker === "function" && window.isSecureContext) {
+    let handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: "EntropyLab key file", accept: { "application/json": [".elkeys"] } }] }), writable = await handle.createWritable();
+    await writable.write(text); await writable.close();
+    return "chosen";
+  }
+  hodlVaultDownload(text, filename);
+  return "downloaded";
+}
+async function hodlVaultExport() {
+  hodlCaptureKey();
+  let states = hodlVaultSavedStates();
+  if (!states.length) { states = hodlKeys.filter((state) => !state.isLab); states.forEach((state) => hodlVaultIds.add(keyVaultIdentity(state))); }
+  if (!states.length) throw new Error("Derive or import a key before exporting the key file.");
+  let password = await hodlVaultPasswordPrompt("export");
+  if (password === null) return;
+  let filename = hodlVaultDateFilename(), text = await encryptKeyVault(states.map(hodlVaultEntry), password, hodlVaultIgnored), unlocked = await decryptKeyVault(text, password);
+  hodlVaultKey = unlocked.key;
+  let saveMode = await hodlVaultSaveExport(text, filename);
+  hodlVaultSavedFileName = filename; hodlVaultSavedMode = saveMode; hodlVaultDirty = false; hodlVaultUpdateLocation();
+  hodlVaultRender(); hodlVaultStatus(`${states.length} key${states.length === 1 ? "" : "s"} exported to ${filename}${saveMode === "downloaded" ? " via browser download" : ""}.`);
+}
+function hodlVaultImportedState(entry) {
+  if (!entry || typeof entry !== "object" || entry.isLab || !entry.fields || !entry.result) return null;
+  let state = hodlNewKeyState(String(entry.name || "Imported key"), hodlNextKeyId++, hodlNextKeyNumber++);
+  Object.assign(state, entry, { isLab: false, id: state.id, number: state.number, color: hodlKeyColor(state.id), fields: { ...state.fields, ...entry.fields }, reveal: false, error: "", errorSpec: null });
+  return state;
+}
+async function hodlVaultImport(file) {
+  let password = await hodlVaultPasswordPrompt("import");
+  if (password === null) return;
+  let unlocked = await decryptKeyVault(await file.text(), password), added = 0, skipped = 0;
+  hodlVaultName = "entropylab-keys-merged.elkeys";
+  unlocked.keys.forEach((entry) => {
+    let identity = keyVaultIdentity(entry), existing = identity && hodlVaultStates().find((state) => keyVaultIdentity(state) === identity);
+    if (existing) { hodlVaultIds.add(keyVaultIdentity(existing)); skipped++; return; }
+    let state = hodlVaultImportedState(entry); if (!state) return;
+    hodlVaultPending.push(state); hodlVaultIds.add(keyVaultIdentity(state)); added++;
+  });
+  (unlocked.ignoredKeys || []).forEach((entry) => {
+    let identity = keyVaultIdentity(entry);
+    if (!identity || hodlVaultStates().some((state) => keyVaultIdentity(state) === identity) || hodlVaultIgnored.some((saved) => keyVaultIdentity(saved) === identity)) return;
+    hodlVaultIgnored.push(entry);
+  });
+  hodlVaultKey = unlocked.key;
+  hodlVaultDirty = false;
+  hodlRenderKeyTabs(); hodlVaultRender();
+  hodlVaultStatus(`${added} new key${added === 1 ? "" : "s"} imported into KeyManager${skipped ? `; ${skipped} duplicate${skipped === 1 ? "" : "s"} kept unchanged` : ""}. Use “Use in Key Station” to load one.`);
+  hodlVaultUpdateLocation();
+}
+function hodlVaultAddState(state) {
+  hodlCaptureKey();
+  hodlVaultIds.add(keyVaultIdentity(state)); hodlVaultDirty = true;
+  hodlVaultRender(); hodlVaultUpdateLocation();
+  hodlVaultStatus("Key added to the vault in memory. Export the key file to save the update.");
+}
+function hodlVaultToggleState(state) {
+  let identity = keyVaultIdentity(state);
+  if (hodlVaultIds.has(identity)) {
+    hodlCaptureKey(); hodlVaultIds.delete(identity); hodlVaultDirty = true; hodlVaultRender(); hodlVaultUpdateLocation(); hodlVaultStatus("Key removed from the vault in memory. Export or update the key file to save the change.");
+  } else hodlVaultAddState(state);
+}
+function hodlVaultUseInStation(state) {
+  let identity = keyVaultIdentity(state), existing = hodlKeys.find((candidate) => !candidate.isLab && keyVaultIdentity(candidate) === identity);
+  if (existing) { hodlActiveKey = hodlKeys.indexOf(existing); }
+  else { let pendingIndex = hodlVaultPending.indexOf(state); if (pendingIndex < 0) return; hodlVaultPending.splice(pendingIndex, 1); hodlKeys.push(state); hodlActiveKey = hodlKeys.length - 1; }
+  hodlRenderKeyTabs(); hodlRestoreKey(); hodlVaultRender(); document.getElementById("keymanager-dialog").hidden = true; hodlVaultStatus("Key loaded into Key Station.");
+}
+function hodlVaultDetachFromStation(state) {
+  let identity = keyVaultIdentity(state), index = hodlKeys.indexOf(state); if (index < 0) return;
+  hodlCaptureKey(); hodlKeys.splice(index, 1); if (!hodlVaultPending.some((candidate) => keyVaultIdentity(candidate) === identity)) hodlVaultPending.push(state);
+  if (hodlActiveKey > index) hodlActiveKey--; else if (hodlActiveKey === index) hodlActiveKey = Math.min(index, hodlKeys.length - 1);
+  hodlRenderKeyTabs(); hodlRestoreKey(); hodlVaultRender();
+  hodlVaultStatus("Key removed from Key Station. It remains available in KeyManager.");
+}
+function hodlVaultIgnoreState(state) {
+  let identity = keyVaultIdentity(state), index = hodlKeys.indexOf(state), pendingIndex = hodlVaultPending.indexOf(state); if (index < 0 && pendingIndex < 0) return;
+  if (index >= 0) { hodlCaptureKey(); hodlKeys.splice(index, 1); if (hodlActiveKey > index) hodlActiveKey--; else if (hodlActiveKey === index) hodlActiveKey = Math.min(index, hodlKeys.length - 1); } else hodlVaultPending.splice(pendingIndex, 1);
+  hodlVaultIgnored = hodlVaultIgnored.filter((entry) => keyVaultIdentity(entry) !== identity); hodlVaultIgnored.push(hodlVaultEntry(state)); hodlVaultIds.delete(identity); hodlVaultDirty = true;
+  hodlRenderKeyTabs(); hodlRestoreKey(); hodlVaultRender(); hodlVaultUpdateLocation(); hodlVaultStatus("Key ignored and stored in the Ignored keys section. Export or update the file to save it.");
+}
+function hodlVaultRestoreIgnored(entry) {
+  let identity = keyVaultIdentity(entry), state = hodlKeys.find((candidate) => !candidate.isLab && keyVaultIdentity(candidate) === identity) || hodlVaultImportedState(entry); if (!state) return;
+  hodlVaultPending = hodlVaultPending.filter((candidate) => keyVaultIdentity(candidate) !== identity);
+  if (!hodlKeys.includes(state)) hodlKeys.push(state);
+  let kept = false; hodlKeys = hodlKeys.filter((candidate) => keyVaultIdentity(candidate) !== identity || !kept && (kept = true));
+  hodlVaultIgnored = hodlVaultIgnored.filter((saved) => keyVaultIdentity(saved) !== identity); hodlVaultIds.add(identity); hodlActiveKey = hodlKeys.indexOf(state); hodlVaultDirty = true;
+  hodlRenderKeyTabs(); hodlRestoreKey(); hodlVaultRender(); hodlVaultUpdateLocation(); hodlVaultStatus("Ignored key restored to Key Station and added to the vault in memory.");
+}
+function hodlVaultRenderIgnoredLegacy(list) {
+  if (!hodlVaultIgnored.length) return;
+  let section = document.createElement("section"), heading = document.createElement("h3"); section.className = "keymanager-ignored-section"; heading.textContent = "Ignored keys"; section.appendChild(heading);
+  hodlVaultIgnored.forEach((entry) => { let row = document.createElement("div"), text = document.createElement("span"), restore = document.createElement("button"); row.className = "keymanager-ignored-row"; text.textContent = `${entry.name || "Unnamed key"} · ${entry.result?.masterFingerprint || "No fingerprint"}`; restore.className = "btn secondary"; restore.type = "button"; restore.textContent = "Restore"; restore.onclick = () => hodlVaultRestoreIgnored(entry); row.append(text, restore); section.appendChild(row); });
+  list.appendChild(section);
+}
+function hodlVaultRenderIgnored(list) {
+  if (!hodlVaultIgnored.length) return;
+  let section = document.createElement("section"), heading = document.createElement("h3"), strip = document.createElement("div"); section.className = "keymanager-ignored-section"; heading.textContent = "Ignored keys"; strip.className = "keymanager-ignored-tabs"; section.append(heading, strip);
+  hodlVaultIgnored.forEach((entry) => { let item = document.createElement("div"), restore = document.createElement("button"), card = document.createElement("div"), image = document.createElement("img"), info = document.createElement("span"), name = document.createElement("span"), fingerprintLabel = document.createElement("small"), fingerprint = entry.result?.masterFingerprint || "No fingerprint"; item.className = "keymanager-ignored-item"; restore.className = "keymanager-ignored-restore"; restore.type = "button"; restore.textContent = "R"; restore.title = "Restore this key"; restore.setAttribute("aria-label", restore.title); restore.onclick = () => hodlVaultRestoreIgnored(entry); card.className = "keymanager-ignored-card"; image.className = "keymanager-key-tab-image"; image.width = 24; image.height = 24; image.alt = ""; image.hidden = true; hodlFillKeyTabLifehash(image, fingerprint); info.className = "keymanager-ignored-info"; name.textContent = entry.name || "Unnamed key"; fingerprintLabel.textContent = fingerprint; info.append(name, fingerprintLabel); card.append(image, info, restore); card.title = fingerprint; item.append(card); strip.appendChild(item); });
+  list.appendChild(section);
+}
+function hodlVaultUpdateLocation() {
+  let location = document.getElementById("keymanager-file-location"), update = document.getElementById("keymanager-update");
+  if (location) location.textContent = hodlVaultImportedFileName ? `Imported file: ${hodlVaultImportedFileName}${hodlVaultFileHandle ? " · Update can write to this file" : " · exact location unavailable in this browser"}` : "No imported file selected.";
+  if (location && hodlVaultImportedFileName) location.textContent = `Imported file location: ${hodlVaultImportedFileName}${hodlVaultFileHandle ? " - Update can write to this file" : " - browser path unavailable"}`;
+  if (location) { let imported = hodlVaultImportedFileName ? `Imported: ${hodlVaultImportedFileName}` : "No imported file selected"; let saved = hodlVaultSavedFileName ? `Last saved: ${hodlVaultSavedFileName}` : "No export saved yet"; location.textContent = `${imported} · ${saved}`; }
+  if (update) update.disabled = !hodlVaultImportedFileName || !hodlVaultDirty;
+}
+async function hodlVaultUpdateFile() {
+  if (!hodlVaultImportedFileName) throw new Error("Import a key file before updating it.");
+  let password = await hodlVaultPasswordPrompt("update");
+  if (password === null) return;
+  hodlCaptureKey();
+  let states = hodlVaultSavedStates();
+  if (!states.length) throw new Error("Add or import a key before updating the key file.");
+  let text = await encryptKeyVault(states.map(hodlVaultEntry), password, hodlVaultIgnored);
+  if (!hodlVaultFileHandle) { hodlVaultDownload(text, hodlVaultImportedFileName); hodlVaultDirty = false; hodlVaultUpdateLocation(); hodlVaultStatus(`Downloaded a replacement for ${hodlVaultImportedFileName}. This browser cannot write directly to the original file.`); return; }
+  let permission = await hodlVaultFileHandle.queryPermission?.({ mode: "readwrite" });
+  if (permission !== "granted") permission = await hodlVaultFileHandle.requestPermission?.({ mode: "readwrite" });
+  if (permission !== "granted") throw new Error("Write permission was not granted for the imported file.");
+  let writable = await hodlVaultFileHandle.createWritable();
+  await writable.write(text); await writable.close();
+  hodlVaultKey = (await decryptKeyVault(text, password)).key;
+  hodlVaultSavedFileName = hodlVaultImportedFileName; hodlVaultSavedMode = "chosen"; hodlVaultDirty = false; hodlVaultUpdateLocation();
+  hodlVaultStatus(`Updated ${hodlVaultImportedFileName} with ${states.length} key${states.length === 1 ? "" : "s"}.`);
+}
+async function hodlVaultChooseFile() {
+  if (typeof window.showOpenFilePicker !== "function" || !window.isSecureContext) { document.getElementById("keymanager-file")?.click(); return; }
+  try {
+    let [handle] = await window.showOpenFilePicker({ multiple: false, types: [{ description: "EntropyLab key file", accept: { "application/json": [".elkeys", ".json"] } }] });
+    let file = await handle.getFile(); hodlVaultFileHandle = handle; hodlVaultImportedFileName = file.name; await hodlVaultImport(file);
+  } catch (error) {
+    if (error?.name !== "AbortError") { hodlVaultFileHandle = null; hodlVaultImportedFileName = ""; hodlVaultStatus(error.message || String(error), true); hodlVaultUpdateLocation(); }
+  }
+}
+function hodlVaultPasswordPrompt(mode) {
+  let overlay = document.getElementById("keymanager-password-dialog");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.className = "keymanager-overlay keymanager-password-overlay no-print";
+    overlay.id = "keymanager-password-dialog";
+    overlay.setAttribute("role", "dialog"); overlay.setAttribute("aria-modal", "true");
+    overlay.innerHTML = '<div class="keymanager-password-card"><div class="keymanager-heading"><div><p class="kicker">Encrypted local vault</p><h2 id="keymanager-password-title">Vault password</h2></div><button class="icon-button" id="keymanager-password-close" type="button" aria-label="Cancel password entry">×</button></div><p class="muted" id="keymanager-password-intro"></p><label class="field keymanager-password-prompt">Password<input id="keymanager-password-input" type="password" autocomplete="new-password" spellcheck="false"></label><p class="field-note keymanager-password-rules">Minimum 12 characters with uppercase, lowercase, number, and special character.</p><p class="keymanager-password-error" id="keymanager-password-error" role="alert"></p><div class="keymanager-password-actions"><button class="btn secondary" id="keymanager-password-cancel" type="button">Cancel</button><button class="btn" id="keymanager-password-confirm" type="button">Continue</button></div></div>';
+    document.body.appendChild(overlay);
+  }
+  let title = document.getElementById("keymanager-password-title"), intro = document.getElementById("keymanager-password-intro"), input = document.getElementById("keymanager-password-input"), error = document.getElementById("keymanager-password-error"), confirm = document.getElementById("keymanager-password-confirm"), cancel = document.getElementById("keymanager-password-cancel"), close = document.getElementById("keymanager-password-close");
+  title.textContent = mode === "import" ? "Import key file" : mode === "update" ? "Update key file" : "Export key file";
+  intro.textContent = mode === "import" ? "Enter the password used to encrypt this key file." : mode === "update" ? "Enter a password to encrypt the updated file." : "Create or confirm the password that will encrypt the downloaded key file.";
+  document.querySelector(".keymanager-password-rules").textContent = mode === "import" ? "The existing file password is accepted as-is." : "Suggestion: use uppercase, lowercase, numbers, and special characters.";
+  input.value = ""; error.textContent = ""; overlay.hidden = false; input.focus();
+  return new Promise((resolve) => {
+    let finish = (value) => { overlay.hidden = true; confirm.onclick = null; cancel.onclick = null; close.onclick = null; input.onkeydown = null; resolve(value); };
+    confirm.onclick = () => { let issue = input.value ? "" : "Enter the file password."; if (issue) { error.textContent = issue; input.focus(); return; } finish(input.value); };
+    cancel.onclick = () => finish(null); close.onclick = () => finish(null);
+    input.onkeydown = (event) => { if (event.key === "Enter") confirm.click(); if (event.key === "Escape") finish(null); };
+  });
+}
+function hodlInitVaultManager() {
+  document.querySelectorAll(".keymanager-toolbar").forEach((element) => element.remove());
+  let dialog = document.getElementById("keymanager-dialog"), open = document.getElementById("keymanager-open");
+  if (!dialog || !open) return;
+  document.querySelector(".keymanager-password")?.remove();
+  let importLabel = document.querySelector('label[for="keymanager-file"]'), exportButton = document.getElementById("keymanager-export"), updateButton = document.getElementById("keymanager-update");
+  let icons = { import: '<svg class="keymanager-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></svg>', update: '<svg class="keymanager-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 1 4m-1-9v5h-5"/></svg>', export: '<svg class="keymanager-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V9m5 5-5-5-5 5M5 3h14"/></svg>' };
+  if (importLabel) { importLabel.textContent = ""; importLabel.insertAdjacentHTML("afterbegin", icons.import); importLabel.append("Import"); }
+  if (exportButton) { exportButton.textContent = ""; exportButton.insertAdjacentHTML("afterbegin", icons.export); exportButton.append("Export"); }
+  if (!updateButton && exportButton) { updateButton = document.createElement("button"); updateButton.className = "btn secondary"; updateButton.id = "keymanager-update"; updateButton.type = "button"; updateButton.insertAdjacentHTML("afterbegin", icons.update); updateButton.append("Update"); exportButton.parentElement.insertBefore(updateButton, exportButton); }
+  if (!document.getElementById("keymanager-file-location")) { let location = document.createElement("p"); location.className = "keymanager-file-location"; location.id = "keymanager-file-location"; dialog.querySelector(".keymanager-card")?.insertBefore(location, document.getElementById("keymanager-status")); }
+  hodlVaultUpdateLocation();
+  open.onclick = () => { hodlVaultRender(); dialog.hidden = false; };
+  document.getElementById("keymanager-close").onclick = () => { dialog.hidden = true; };
+  document.getElementById("keymanager-export").onclick = async () => { try { await hodlVaultExport(); } catch (error) { hodlVaultStatus(error.message || String(error), true); } };
+  updateButton.onclick = async () => { try { await hodlVaultUpdateFile(); } catch (error) { hodlVaultStatus(error.message || String(error), true); } };
+  if (importLabel) importLabel.onclick = (event) => { event.preventDefault(); hodlVaultChooseFile(); };
+  document.getElementById("keymanager-file").onchange = async (event) => { let file = event.target.files?.[0]; if (!file) return; hodlVaultFileHandle = null; hodlVaultImportedFileName = file.name; try { await hodlVaultImport(file); } catch (error) { hodlVaultImportedFileName = ""; hodlVaultStatus(error.message || String(error), true); hodlVaultUpdateLocation(); } event.target.value = ""; };
 }
 function hodlCloneDerivedKey(source, existing) {
   let state = existing ? { ...existing, fields: { ...existing.fields, ...(existing.fields.privateKeys ? { privateKeys: { ...existing.fields.privateKeys } } : {}) } } : hodlNewKeyState();
@@ -10198,6 +10519,7 @@ function hodlCaptureKey() {
   if (key) privateKeys[keyKind] = key.value;
   state.fields.keyKind = keyKind;
   state.fields.key = "";
+  if (hodlVaultImportedFileName && hodlVaultIds.has(keyVaultIdentity(state))) { hodlVaultDirty = true; hodlVaultUpdateLocation(); }
 }
 function hodlSyncSelect(select, value) {
   if (!select) return;
@@ -10612,16 +10934,7 @@ function hodlDeleteActiveKey() {
     hodlSyncKeyDeleteButton();
     return;
   }
-  let deletedIndex = hodlActiveKey, deletedState = state;
-  hodlKeys.splice(deletedIndex, 1);
-  hodlNextKeyNumber = hodlKeys.length ? hodlKeys.reduce((latest, state) => Math.max(latest, state.number), 0) + 1 : deletedState.number;
-  if (!hodlKeys.length) {
-    hodlKeys.push(hodlNewLabState());
-    hodlActiveKey = 0;
-  } else hodlActiveKey = Math.min(deletedIndex, hodlKeys.length - 1);
-  hodlRenderKeyTabs();
-  hodlRestoreKey();
-  (hodlActiveKey >= 0 ? hodlElement("#key-tabs").children[hodlActiveKey] : hodlElement("#add-key"))?.focus();
+  hodlVaultDetachFromStation(state);
 }
 var hodlNextMsigId = 1, hodlNextMsigNumber = 1, hodlMsigs = [], hodlActiveMsig = -1;
 function hodlNewMsigState(name, msigId, msigNumber) {
@@ -11126,6 +11439,7 @@ function hodlInitTabDrag(box) {
 function hodlInitKeyManager() {
   hodlElement("#add-key").onclick = hodlAddKey;
   hodlElement("#delete-key").onclick = hodlDeleteActiveKey;
+  hodlInitVaultManager();
   hodlRenderKeyTabs();
   hodlInitTabDrag(hodlElement("#key-tabs"));
   if (hodlWorkspace === "calc") hodlRestoreKey();

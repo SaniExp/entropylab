@@ -70,6 +70,11 @@ material. Its security posture rests on the following model:
 - Wallet security depends on the quality and secrecy of the entropy, seed
   phrase, passphrase, or private key supplied by the user, and on the
   integrity of the machine it runs on.
+- KeyManager exports are password-encrypted `.elkeys` files. The file contains
+  a versioned PBKDF2-HMAC-SHA512 salt and AES-256-GCM nonce/ciphertext; it does
+  not contain the password. Encryption protects the file at rest, but the
+  decrypted keys are present in browser memory after import and remain exposed
+  to a compromised machine or page runtime until the session is cleared.
 - Silent Payments (BIP-352) support is a calculator: it derives reusable
   addresses, sender outputs, and spend tweaks from user-supplied keys and
   pasted transaction data. It does not connect to a node, Electrum server, or

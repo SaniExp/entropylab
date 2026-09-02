@@ -201,6 +201,21 @@ change the resulting BitBox entropy. Wallet security still depends on the
 quality and secrecy of the entropy, seed phrase, passphrase, or private key
 supplied by the user.
 
+### KeyManager vault
+
+The **KeyManager** button in the header opens a local, in-memory key vault. It
+can export the current Key Station keys to one `.elkeys` JSON file encrypted
+with a password, and import that file again on another offline session. The
+vault uses PBKDF2-HMAC-SHA512 to derive an AES-256-GCM encryption key; the salt,
+nonce, and ciphertext are stored in the file, while the password is not.
+
+EntropyLab does not save the vault automatically in browser storage and does
+not upload it. Imported keys remain available to Key Station, BIP-85,
+multisignature, and Silent Payments for the current page session. Locking the
+vault forgets its in-memory encryption key but does not wipe keys already loaded
+in Key Station; use the existing clear/wipe controls when the session itself
+must be cleared.
+
 ## FAQ
 
 ### Does EntropyLab generate a seed or private key for me?
